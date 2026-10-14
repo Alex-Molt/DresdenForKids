@@ -137,6 +137,30 @@ const EVENTS = [
     checked: "2026-10-14"
   },
   {
+    name: "Deutsches Hygiene-Museum",
+    category: "museum",
+    age: "Jedes Alter (Kinder-Museum „Welt der Sinne“)",
+    address: "Lingnerplatz 1, 01069 Dresden",
+    hours: "Di–So 10:00–17:00, Mo geschlossen · Kinder-Museum Di–Fr 12–17, Sa/So 10–17 Uhr",
+    price: "Erw. 12 €, erm. 6 €, unter 17 frei",
+    highlight: "Dauerthema Körper, Gesundheit & Natur – plus das „Welt der Sinne“-Kinder-Museum zum Erfahren. Sonntag 15 Uhr spezielle Familienführung. Während der KINOLINO-Ferien: Vorführungen im Museum.",
+    booking: "keine",
+    url: "https://www.dhmd.de/",
+    checked: "2026-10-14"
+  },
+  {
+    name: "Mathematisch-Physikalischer Salon",
+    category: "museum",
+    age: "Jedes Alter (ab ca. 4 J. spannend)",
+    address: "Schlossstraße 28, 01097 Dresden (im Zwinger)",
+    hours: "Di–So 11:00–17:00, Mo geschlossen",
+    price: "Erw. 6 €, erm. 4,50 €, Kinder bis Schuleintritt frei, Schüler u. 20 J. 2 €",
+    highlight: "Barocke Wunderkammer mit 130 Instrumenten & Apparaten – die „Glockenuhr“ und das Perpetuum-Mobil sind Kindermagnet. Teil des Zwingers – Kombi-Ticket mit Gemäldegalerie Alte Meister möglich.",
+    booking: "keine (Kitagruppen ab 9:30 mit Voranmeldung)",
+    url: "https://mathematisch-physikalischer-salon.skd.museum/",
+    checked: "2026-10-14"
+  },
+  {
     name: "Schlösserland-Fernpass (Moritzburg & Co.)",
     category: "umkreis",
     age: "Jedes Alter",
