@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📅 Tages-Kalender – Dresden for Kids</title>
+  <meta name="description" content="Tägliche Übersicht: Was ist heute & in den nächsten Tagen für Kinder in Dresden los? Events, Workshops, Vorführungen – mit Uhrzeit, Ort & Kosten.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
+</head>
+<body>
+  <header class="hero hero-small">
+    <div class="container">
+      <a class="back-link" href="index.html">← Alle Orte &amp; Events</a>
+      <h1>📅 Was ist los? <span class="accent">Tages-Kalender</span></h1>
+      <p class="tagline">Alle Events ab heute – sortiert nach Tag. Vergangene Termine bleiben nicht liegen, sie verschwinden automatisch.</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="cal-toolbar">
+      <div class="cal-legend">
+        <span class="cat-tag cat-tsd">🔧 TSD</span>
+        <span class="cat-tag cat-zoo">🦁 Zoo</span>
+        <span class="cat-tag cat-bibo">📚 Bibo</span>
+        <span class="cat-tag cat-kinolino">🎬 KINOLINO</span>
+        <span class="cat-tag cat-muehle">⚙️ Mühle</span>
+      </div>
+      <p class="cal-info">Stand: <span id="checked">–</span> · <span id="count">–</span> Events ab heute</p>
+    </div>
+    <section id="cal-days" class="cal-days"></section>
+  </main>
+
+  <footer class="container footer">
+    <p><a href="index.html">← Dresden for Kids</a> · Daten werden regelmäßig aktualisiert (nähere Infos auf der <a href="https://github.com/Alex-Molt/DresdenForKids">GitHub-Seite</a>).</p>
+  </footer>
+
+  <script src="calendar-data.js"></script>
+  <script src="kalender.js"></script>
+</body>
+</html>

@@ -157,3 +157,109 @@ code {
   border-radius: 6px;
   font-size: 0.85em;
 }
+
+/* ---------- Kalender-Subseite ---------- */
+.hero-small { padding: 36px 0 32px; }
+.back-link {
+  display: inline-block;
+  margin-bottom: 14px;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.back-link:hover { text-decoration: underline; }
+.calendar-link {
+  text-decoration: none;
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.calendar-link:hover { background: var(--accent); color: #fff; }
+
+.cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.cal-legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.cat-tag {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+}
+.cal-info { font-size: 0.9rem; color: var(--muted); }
+
+.day-block { margin-bottom: 30px; }
+.day-today {
+  background: var(--accent-soft);
+  border: 1.5px solid #f5c3b4;
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.day-head {
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+}
+.day-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+.day-events {
+  display: grid;
+  gap: 10px;
+}
+.cal-card {
+  display: flex;
+  gap: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  align-items: flex-start;
+}
+.cat-tsd { border-left-color: #e8843d; }
+.cat-zoo { border-left-color: #7cb342; }
+.cat-bibo { border-left-color: #5c9ded; }
+.cat-kinolino { border-left-color: #9c6ade; }
+.cat-muehle { border-left-color: #c9a227; }
+
+.cal-time {
+  flex-shrink: 0;
+  min-width: 62px;
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--accent);
+  padding-top: 2px;
+}
+.cal-body { flex-grow: 1; min-width: 0; }
+.cal-body h3 { font-size: 1.05rem; margin-bottom: 4px; }
+.cal-venue, .cal-cost, .cal-note {
+  font-size: 0.9rem;
+  margin: 2px 0;
+}
+.cal-venue { color: var(--ink); }
+.cal-cost { color: var(--muted); }
+.cal-note { color: var(--muted); font-style: italic; }
+.cal-link {
+  flex-shrink: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cal-link:hover { text-decoration: underline; }
