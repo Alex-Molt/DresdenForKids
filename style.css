@@ -236,6 +236,10 @@ code {
 .cat-bibo { border-left-color: #5c9ded; }
 .cat-kinolino { border-left-color: #9c6ade; }
 .cat-muehle { border-left-color: #c9a227; }
+.cat-theater { border-left-color: #e05c8a; }
+.cat-museum { border-left-color: #6b7fd4; }
+.cat-umkreis { border-left-color: #4aa89a; }
+.cat-event { border-left-color: #d46b4a; }
 
 .cal-time {
   flex-shrink: 0;

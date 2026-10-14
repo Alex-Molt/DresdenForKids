@@ -3,7 +3,11 @@ const CAT_LABELS = {
   zoo: "🦁 Zoo",
   bibo: "📚 Bibo",
   kinolino: "🎬 KINOLINO",
-  muehle: "⚙️ Zschoner Mühle"
+  muehle: "⚙️ Zschoner Mühle",
+  theater: "🎭 Theater & Puppenspiel",
+  museum: "🏛️ Museum",
+  umkreis: "🏰 Schloss & Burg (Umkreis)",
+  event: "🎉 Event"
 };
 
 const WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];

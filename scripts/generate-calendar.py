@@ -1,23 +1,44 @@
 #!/usr/bin/env python3
-"""Generiert calendar-data.js für DresdenForKids (self-contained, holt Live-Daten).
+"""Generiert calendar-data.js für DresdenForKids.
 
-Quellen (live geparst):
-  - KINOLINO:      https://www.kinolino.de/programm          (Filmtag-Tabelle)
-  - Zschoner Mühle: https://www.zschoner-muehle.de/puppentheater/  (Kalendarium)
+QUELLEN kommen aus der Registry in README.md (Abschnitt
+"## Datenquellen für den Kalender (Registry)", JSON-Block).
+Neue Quelle = neuer JSON-Eintrag in der README (per PR) + Parser-Schlüssel
+aus PARSE_FNS. Nicht maschinenlesbare Seiten (JS-only): kind "browser"/"manual",
+Ereignisse landen in calendar-extra.json (vom Cron/LLM gepflegt).
 
-Quellen (manuell gepflegt, im Code unter KEEP_CURRENT):
-  - TSD Ferienprogramm, Bibo Herbstferienprogramm, Zoo (Treffpunkte/Zookasper/Ferien/Halloween)
-
-Aufruf:  python3 scripts/generate-calendar.py
+Aufruf:  python3 scripts/generate-calendar.py [--test <quelle-id>]
 Prüfen:  node scripts/check-calendar.js
 """
-import re, html as h, datetime, os, ssl, urllib.request, sys
+import re, json, html as h, datetime, os, ssl, urllib.request, sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+README = os.path.join(REPO_ROOT, "README.md")
+EXTRA = os.path.join(REPO_ROOT, "calendar-extra.json")
 OUT = os.path.join(REPO_ROOT, "calendar-data.js")
 ctx = ssl.create_default_context()
+TODAY = datetime.date.today()
+WINDOW_START = TODAY - datetime.timedelta(days=10)
+WINDOW_END = TODAY + datetime.timedelta(days=75)
 
-def to_text(raw: str) -> str:
+MONTHS = {"jan": 1, "feb": 2, "märz": 3, "maerz": 3, "apr": 4, "mai": 5, "jun": 6,
+          "jul": 7, "aug": 8, "sept": 9, "okt": 10, "nov": 11, "dez": 12,
+          "januar": 1, "februar": 2, "maerz": 3, "märz": 3, "april": 4, "mai": 5,
+          "juni": 6, "juli": 7, "august": 8, "september": 9, "oktober": 10,
+          "november": 11, "dezember": 12}
+KID_RE = re.compile(r"kinder|kind|familie|familien|jugend|ferien|schule|schule|halloween|fledermaus|puppent", re.I)
+
+
+def raw_fetch(url, referer=None):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    if referer:
+        headers["Referer"] = referer
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=40, context=ctx) as r:
+        return r.read().decode("utf-8", "ignore")
+
+
+def to_text(raw):
     t = re.sub(r"<script.*?</script>", " ", raw, flags=re.S | re.I)
     t = re.sub(r"<style.*?</style>", " ", t, flags=re.S | re.I)
     t = re.sub(r"<(br|/p|/div|/li|/h[1-6]|/tr|/td)[^>]*>", "\n", t, flags=re.I)
@@ -27,42 +48,68 @@ def to_text(raw: str) -> str:
     t = re.sub(r"\n\s*\n+", "\n", t)
     return t.strip()
 
-def fetch(url: str) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=40, context=ctx) as r:
-        return to_text(r.read().decode("utf-8", "ignore"))
 
-# ---------- KINOLINO ----------
-VENUE_NAMES = {
-    "Deutsches Hygiene-Museum Dresden": "Deutsches Hygiene-Museum",
-    "GEH8 KUNST RAUM": "GEH8 KUNST RAUM",
-    "Theologisch-Pädagogisches Institut Moritzburg": "Moritzburg (TPI)",
-    "Landesbühnen Sachsen": "Landesbühnen Sachsen",
-    "Programmkino Ost": "Programmkino Ost",
-    "JKS Passage": "JKS Passage",
-    "Zentralwerk": "Zentralwerk",
-    "Karl-May-Museum Radebeul": "Karl-May-Museum Radebeul",
-    "Museumskino in den Technischen Sammlungen Dresden": "TSD Museumskino",
-    "Zentralkino": "Zentralkino",
-    "Städtische Bibliothek Weixdorf": "Bibliothek Weixdorf",
-    "JohannStadthalle": "JohannstadtHalle",
-    "Centrum Galerie Dresden": "Centrum Galerie",
-    "Filmgalerie Striesen": "Filmgalerie Striesen",
-    "Kinopolis": "Kinopolis",
-    "Clubkino im Lingnerschloss": "Clubkino Lingnerschloss",
-    "Städtische Bibliothek Weißig": "Bibliothek Weißig",
-    "Städtische Bibliothek Leubnitz-Neuostra": "Bibliothek Leubnitz-Neuostra",
-    "Städtische Bibliothek Cossebaude": "Bibliothek Cossebaude",
-    "Johannstädter Kulturtreff": "Johannstädter Kulturtreff",
-}
+def fetch(url, referer=None):
+    return to_text(raw_fetch(url, referer))
 
-def parse_kinolino():
-    lines = fetch("https://www.kinolino.de/programm").splitlines()
+
+def mk(d, t, title, venue, cost, note, url, cat):
+    return {"d": d.isoformat() if hasattr(d, "isoformat") else d,
+            "t": t, "title": title.strip(), "venue": venue,
+            "cost": cost, "note": note, "url": url, "cat": cat}
+
+
+def in_window(iso):
+    return WINDOW_START.isoformat() <= iso <= WINDOW_END.isoformat()
+
+
+def infer_year(day, month, ref=TODAY):
+    """Nächstes Vorkommen von Tag.Monat ab (ref-30 Tage)."""
+    for y in (ref.year, ref.year + 1):
+        try:
+            cand = datetime.date(y, month, day)
+        except ValueError:
+            continue
+        if cand >= ref - datetime.timedelta(days=30):
+            return y
+    return ref.year + 1
+
+
+def is_kid_event(title, cats=""):
+    return bool(KID_RE.search(title) or KID_RE.search(cats))
+
+
+# ============================ PARSER ============================
+
+def p_kinolino(src):
+    U = "https://www.kinolino.de/programm"
+    VENUE_NAMES = {
+        "Deutsches Hygiene-Museum Dresden": "Deutsches Hygiene-Museum",
+        "GEH8 KUNST RAUM": "GEH8 KUNST RAUM",
+        "Theologisch-Pädagogisches Institut Moritzburg": "Moritzburg (TPI)",
+        "Landesbühnen Sachsen": "Landesbühnen Sachsen",
+        "Programmkino Ost": "Programmkino Ost",
+        "JKS Passage": "JKS Passage",
+        "Zentralwerk": "Zentralwerk",
+        "Karl-May-Museum Radebeul": "Karl-May-Museum Radebeul",
+        "Museumskino in den Technischen Sammlungen Dresden": "TSD Museumskino",
+        "Zentralkino": "Zentralkino",
+        "Städtische Bibliothek Weixdorf": "Bibliothek Weixdorf",
+        "JohannStadthalle": "JohannstadtHalle",
+        "Centrum Galerie Dresden": "Centrum Galerie",
+        "Filmgalerie Striesen": "Filmgalerie Striesen",
+        "Kinopolis": "Kinopolis",
+        "Clubkino im Lingnerschloss": "Clubkino Lingnerschloss",
+        "Städtische Bibliothek Weißig": "Bibliothek Weißig",
+        "Städtische Bibliothek Leubnitz-Neuostra": "Bibliothek Leubnitz-Neuostra",
+        "Städtische Bibliothek Cossebaude": "Bibliothek Cossebaude",
+        "Johannstädter Kulturtreff": "Johannstädter Kulturtreff",
+    }
+    lines = fetch(U).splitlines()
     venues = set(VENUE_NAMES.keys())
     day_re = re.compile(r"^(Mo|Di|Mi|Do|Fr|Sa|So), (\d{2})\.(\d{2})\.(\d{4})$")
     time_re = re.compile(r"^(\d{2}:\d{2}) Uhr$")
-    events, cur = [], None
-    i = 0
+    events, cur, i = [], None, 0
     while i < len(lines):
         line = lines[i].strip()
         m = day_re.match(line)
@@ -72,8 +119,7 @@ def parse_kinolino():
             continue
         t = time_re.match(line)
         if t and cur:
-            tm = t.group(1)
-            film_lines, j, venue = [], i + 1, None
+            tm, j, venue, film_lines = t.group(1), i + 1, None, []
             while j < len(lines) and len(film_lines) <= 3:
                 l2 = lines[j].strip()
                 if not l2 or l2 in ("Uhrzeit", "Film", "Veranstaltungsort"):
@@ -84,158 +130,445 @@ def parse_kinolino():
                     break
                 film_lines.append(l2)
                 j += 1
-            if venue and " ".join(film_lines):
-                events.append({
-                    "d": cur, "t": tm, "title": " ".join(film_lines),
-                    "venue": VENUE_NAMES[venue],
-                    "cost": "1 € + Museumseintritt" if venue == "Museumskino in den Technischen Sammlungen Dresden"
-                            else "je nach Spielstätte (Kino ~3–5 €, Bibliotheks-Vorführungen oft frei)",
-                    "note": "KINOLINO – Kinderfilmfest (Oktober)",
-                    "url": "https://www.kinolino.de/programm", "cat": "kinolino",
-                })
+            if venue and " ".join(film_lines) and in_window(cur):
+                events.append(mk(cur, tm, " ".join(film_lines), VENUE_NAMES[venue],
+                                  "1 € + Museumseintritt" if venue.startswith("Museumskino")
+                                  else "je nach Spielstätte (Kino ~3–5 €, Bibliotheksvorführungen oft frei)",
+                                  "KINOLINO – Kinderfilmfest (Oktober)", U, "kinolino"))
             i = j + 1
             continue
         i += 1
-    seen, out = set(), []
-    for e in events:
-        k = (e["d"], e["t"], e["title"], e["venue"])
-        if k not in seen:
-            seen.add(k)
-            out.append(e)
-    return out
+    return events
 
-# ---------- Zschoner Mühle ----------
-def zschoner():
-    lines = fetch("https://www.zschoner-muehle.de/puppentheater/").splitlines()
-    # Kalendarium: "17. Oktober 2026" (oder "17 17. Oktober 2026") gefolgt von "●…" und "HH:MM: Titel"
-    year = datetime.date.today().year
-    date_re = re.compile(r"^(?:\d{1,2} )?(\d{1,2})\. (Oktober|November|Dezember|Januar|Februar|März|April|Mai|Juni|Juli|August|September) (\d{4})$")
+
+def _month_num(name):
+    """Monatname (voll oder abgekürzt, egal wie geschrieben) → Nummer."""
+    n = name.lower().strip()
+    if n in MONTHS:
+        return MONTHS[n]
+    for k, v in MONTHS.items():
+        if n.startswith(k[:4]):
+            return v
+    return None
+
+
+def p_muehle(src):
+    U = "https://www.zschoner-muehle.de/puppentheater/"
+    lines = fetch(U).splitlines()
+    date_re = re.compile(r"^(?:\d{1,2} )?(\d{1,2})\. (\w+) (\d{4})$")
     time_re = re.compile(r"^(\d{2}:\d{2}): (.+)$")
-    MONTHS = {"Januar": 1, "Februar": 2, "März": 3, "April": 4, "Mai": 5, "Juni": 6,
-              "Juli": 7, "August": 8, "September": 9, "Oktober": 10, "November": 11, "Dezember": 12}
     events, cur = [], None
     for line in lines:
         l = line.strip()
         m = date_re.match(l)
         if m:
-            d, mo, y = int(m.group(1)), MONTHS[m.group(2)], int(m.group(3))
-            if y < year:
-                continue
-            cur = f"{y}-{mo:02d}-{d:02d}"
+            mon = _month_num(m.group(2))
+            if mon:
+                cur = f"{m.group(3)}-{mon:02d}-{int(m.group(1)):02d}"
             continue
         t = time_re.match(l)
-        if t and cur:
+        if t and cur and in_window(cur):
             tm, title = t.group(1), t.group(2).strip()
             is_tour = "mühlenführung" in title.lower()
-            events.append({
-                "d": cur, "t": tm, "title": title, "venue": "Zschoner Mühle",
-                "cost": "7 € / erm. 5 €" if is_tour else "Karten online (zschoner-muehle.de)",
-                "note": "Erlebnismühlenführung – Dresdner Mühlenmuseum, Reservierung empfohlen" if is_tour
-                        else "Puppentheater für die ganze Familie – Reservierung empfohlen",
-                "url": "https://www.zschoner-muehle.de/puppentheater/", "cat": "muehle",
-            })
+            events.append(mk(cur, tm, title, "Zschoner Mühle",
+                             "7 € / erm. 5 €" if is_tour else "Karten online (zschoner-muehle.de)",
+                             "Erlebnismühlenführung – Dresdner Mühlenmuseum, Reservierung empfohlen" if is_tour
+                             else "Puppentheater für die ganze Familie – Reservierung empfohlen",
+                             U, "muehle"))
+    return events
+
+
+def p_tsd(src):
+    U = src["url"]
+    t = raw_fetch(U)
+    blocks = re.split(r'<div class="event-list__event event-list__event--with-toggle', t)[1:]
+    events, seen = [], set()
+    for b in blocks:
+        dm = re.search(r'event-list__date">(?:Mo|Di|Mi|Do|Fr|Sa|So)[^0-9]*(\d{1,2})\. (\w+?)\s*<div class="event-list__time">(\d{1,2}:\d{2})', b)
+        tm = re.search(r'event-list__title">([^<]+)</h5>', b)
+        st = re.search(r'event-list__status-info">([^<]*)</div>', b)
+        if not (dm and tm):
+            continue
+        day, mon = int(dm.group(1)), dm.group(2).lower()[:4]
+        if mon not in MONTHS:
+            continue
+        y = infer_year(day, MONTHS[mon])
+        d = datetime.date(y, MONTHS[mon], day)
+        if not in_window(d.isoformat()):
+            continue
+        title = h.unescape(tm.group(1)).strip()
+        booking = h.unescape(st.group(1)).strip() if st else ""
+        # Beschreibung (Alter, Dauer, Anm.) aus Akkordeon
+        desc = ""
+        acc = re.search(r'event-list__accordion-content[^>]*>(.*?)</div>\s*<div class="event-list__event ', b, re.S)
+        if not acc:
+            acc = re.search(r'event-list__accordion-content[^>]*>(.*)', b, re.S)
+        if acc:
+            desc = h.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", acc.group(1)))).strip()
+            desc = re.sub(r"^Mit Spielen\s*", "", desc)
+            desc = desc[:180]
+        key = (d.isoformat(), dm.group(2), title)
+        if key in seen:
+            continue
+        seen.add(key)
+        note = booking if booking else "Offenes Angebot"
+        if desc:
+            note = f"{note} · {desc}" if booking else desc
+        events.append(mk(d, dm.group(3), title, "Technische Sammlungen (TSD)",
+                         "Museumseintritt (fr ab 12 Uhr frei)", note, U, "tsd"))
+    return events
+
+
+def p_zoo(src):
+    """Zoo-Veranstaltungen: Zeile 1 'DD. Monat YYYY' (ggf. '- DD. Monat YYYY'),
+    Zeile 2 'HH:MM [- HH:MM] Uhr Titel'."""
+    U = src["url"]
+    lines = fetch(U).splitlines()
+    date_re = re.compile(r"^(\d{1,2})\. (\w+) (\d{4})(?:\s*-\s*(\d{1,2})\. (\w+) (\d{4}))?$")
+    time_re = re.compile(r"^(\d{1,2}:\d{2}(?:\s*-\s*\d{1,2}:\d{2})?) Uhr\s+(.+)$")
+    events, cur = [], None
+    for line in lines:
+        l = line.strip()
+        m = date_re.match(l)
+        if m:
+            mon1 = _month_num(m.group(2))
+            if not mon1:
+                cur = None
+                continue
+            cur = f"{m.group(3)}-{mon1:02d}-{int(m.group(1)):02d}"
+            cur_end = None
+            if m.group(4):
+                mon2 = _month_num(m.group(5))
+                if mon2:
+                    cur_end = f"{m.group(6)}-{mon2:02d}-{int(m.group(4)):02d}"
+            cur = (cur, cur_end)
+            continue
+        t = time_re.match(l)
+        if t and cur and in_window(cur[0]):
+            tm, title = t.group(1), t.group(2).strip()
+            if not is_kid_event(title):
+                continue
+            rng = f"{cur[0][8:]}–{cur[1][8:]}" if cur[1] and cur[1] != cur[0] else ""
+            events.append(mk(cur[0], tm, title, "Zoo Dresden", "Zoo-Eintritt",
+                             f"Veranstaltung {rng}" if rng else "Veranstaltung im Zoo",
+                             U, "zoo"))
+    return events
+
+
+def p_tjg(src):
+    items = []
+    for page in range(0, 6):
+        data = json.loads(raw_fetch(f"https://www.tjg-dresden.de/api/events?page={page}&limit=50"))
+        batch = data.get("items", [])
+        items += batch
+        if len(batch) < 50:
+            break
+    events, seen = [], set()
+    for i in items:
+        for dd in i.get("event_dates", []):
+            iso = dd["start_date"][:10]
+            if not in_window(iso):
+                continue
+            key = (iso, dd["start_date"][11:16], i["title"])
+            if key in seen:
+                continue
+            seen.add(key)
+            pr = i.get("prices", [])
+            cost = "–"
+            if pr:
+                cost = f"{min(p['amount'] for p in pr)}–{max(p['amount'] for p in pr)} €"
+            events.append(mk(iso, dd["start_date"][11:16], i["title"],
+                             "tjg. Theater Junge Generation", cost,
+                             "Tickets: tjg-dresden.de",
+                             "https://www.tjg-dresden.de/spielplan/", "theater"))
+    return events
+
+
+def p_august(src):
+    """AUGUST-Theater-Spielplan: Block = Titelzeile(n) / 'Wochentag, DD. Monat YYYY , HH.MM Uhr' / Preis / 'Für Kinder und Familien'."""
+    U = src["url"]
+    lines = fetch(U).splitlines()
+    lines = [l.strip() for l in lines]
+    date_re = re.compile(r"^(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag), (\d{1,2})\. (\w+) (\d{4}) , (\d{1,2})\.(\d{2}) Uhr$")
+    events, seen = [], set()
+    for i, l in enumerate(lines):
+        m = date_re.match(l)
+        if not m:
+            continue
+        mon = _month_num(m.group(3))
+        if not mon:
+            continue
+        d = f"{m.group(4)}-{mon:02d}-{int(m.group(2)):02d}"
+        if not in_window(d):
+            continue
+        # Titel: Zeile(n) bis zur letzten 'Spielplan …' / vorherigen Datumszeile
+        title = None
+        for j in range(i - 1, max(i - 6, -1), -1):
+            cand = lines[j]
+            if not cand:
+                continue
+            if date_re.match(cand) or cand.startswith("Spielplan"):
+                break
+            if re.match(r"^[\d,]+(,\d+)? €", cand) or cand.startswith("Für ") or cand in ("Alle löschen", "Suche"):
+                continue
+            if len(cand) >= 4:
+                title = cand
+            break
+        if not title:
+            continue
+        # Preis + Kinder-Marker: nächste 3 Zeilen
+        tail = " ".join(lines[i + 1:i + 4])
+        price_m = re.search(r"([\d,]+(?:,\d+)? €(?:\s*-\s*[\d,]+(?:,\d+)? €)?)", tail)
+        kids = "Für Kinder und Familien" in tail
+        if not kids:
+            continue
+        key = (d, m.group(5) + m.group(6), title)
+        if key in seen:
+            continue
+        seen.add(key)
+        events.append(mk(d, f"{m.group(5)}:{m.group(6)}", title, "AUGUST Theater",
+                         price_m.group(1) if price_m else "–",
+                         "Kinder- & Familienstück · August Theater, Bürgerstraße (Dresden-Plauen)",
+                         "https://august-theater-dresden.de/spielplan/", "theater"))
+    return events
+
+
+def p_vollmann(src):
+    U = src["url"]
+    data = json.loads(raw_fetch(U, referer="https://www.puppentheater-vollmann.de/spielplan.html"))
+    events = []
+    for e in data:
+        iso = e["start"][:10]
+        if not in_window(iso):
+            continue
+        title = re.sub(r"\s*\(\d+ Restkarten\)$", "", e.get("title", "")).strip()
+        events.append(mk(iso, e["start"][11:16], title, "Puppentheater Alte Feuerwache",
+                         "Karten: puppentheater-vollmann.de",
+                         "Puppentheater für die ganze Familie, Pillnitz",
+                         "https://www.puppentheater-vollmann.de/spielplan.html", "theater"))
+    return events
+
+
+def _schl_base(url):
+    m = re.match(r"(https?://[^/]+)", url)
+    return m.group(1) if m else url
+
+
+def p_schl_list(src):
+    """Schlösserland list-item-Layout (eigene Subdomains: Moritzburg, Rochlitz, Gnandstein, Nossen, Albrechtsburg, Zwinger)."""
+    U = src["url"]
+    base = _schl_base(U)
+    t = raw_fetch(U)
+    blocks = re.split(r'<div class="grid-list-item ', t)[1:]
+    date_re = re.compile(r"^(?:Mo|Di|Mi|Do|Fr|Sa|So) (\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+bis\s+\w{1,3} (\d{1,2})\.(\d{1,2})\.(\d{4}))?$")
+    time_re = re.compile(r"^(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?(?:\s*Uhr)?$")
+    events = []
+    for b in blocks:
+        title = re.search(r'list-item-headline-inner">([^<]+)<', b)
+        link = re.search(r'href="([^"]*detailseite/event/[^"]+)"', b)
+        if not title:
+            continue
+        title = h.unescape(title.group(1)).strip()
+        cats = " ".join(re.findall(r'class="category[^"]*"[^>]*title="([^"]*)"', b))
+        metas = [h.unescape(re.sub(r"\s+", " ", m)).strip()
+                 for m in re.findall(r'<p>([^<]*)</p>', b)]
+        d = tm = None
+        for meta in metas:
+            dm = date_re.match(meta)
+            if dm:
+                if dm.group(4):  # Zeitraum (Dauerausstellung etc.)
+                    try:
+                        e2 = datetime.date(int(dm.group(6)), int(dm.group(5)), int(dm.group(4)))
+                        d1 = datetime.date(int(dm.group(3)), int(dm.group(2)), int(dm.group(1)))
+                        if (e2 - d1).days > 60:
+                            continue  # Dauerausstellung überspringen
+                    except ValueError:
+                        continue
+                d = datetime.date(int(dm.group(3)), int(dm.group(2)), int(dm.group(1)))
+                continue
+            tmm = time_re.match(meta)
+            if tmm and not tm:
+                tm = tmm.group(0).replace(" Uhr", "").strip()
+        if not d or not in_window(d.isoformat()):
+            continue
+        if not is_kid_event(title, cats):
+            continue
+        url_d = (link.group(1) if link else U)
+        if url_d.startswith("/"):
+            url_d = base + url_d
+        events.append(mk(d, tm or "–", title, src["venue"], "siehe Veranstaltungsdetailseite",
+                         f"Kategorien: {cats}" if cats else "Veranstaltung", url_d, src.get("cat", "umkreis")))
+    return events
+
+
+def p_schl_acc(src):
+    """Schlösserland Venue-Seiten mit Event-Akkordeon (Königstein, Freudenstein …)."""
+    U = src["url"]
+    t = raw_fetch(U)
+    pat = re.compile(
+        r'([MoDiMiFrSaSo]) (\d{1,2})\.(\d{1,2})\.(\d{4}) (\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2}) Uhr'
+        r'[^|]*\|\s*([^<]+?)<br>\s*<a href="([^"]+)"[^>]*>([^<]+)<')
+    events = []
+    for m in pat.finditer(t):
+        d = datetime.date(int(m.group(4)), int(m.group(3)), int(m.group(2)))
+        if not in_window(d.isoformat()):
+            continue
+        title = h.unescape(m.group(11)).strip()
+        cats = h.unescape(m.group(9)).strip()
+        if not is_kid_event(title, cats):
+            continue
+        url_d = m.group(10)
+        if url_d.startswith("/"):
+            url_d = _schl_base(U) + url_d
+        events.append(mk(d, f"{m.group(5)}:{m.group(6)}", title, src["venue"],
+                         "siehe Veranstaltungsdetailseite",
+                         f"Kategorien: {cats}", url_d, src.get("cat", "umkreis")))
+    return events
+
+
+def p_verkehrsmuseum(src):
+    U = src["url"]
+    t = raw_fetch(U)
+    events = []
+    for b in re.split(r'itemtype="http://schema.org/Event"', t)[1:]:
+        name = re.search(r'<h3[^>]*itemprop="name"[^>]*>\s*(?:<a[^>]*>)?\s*([^<]+?)\s*(?:</a>)?\s*</h3>', b, re.S)
+        tim = re.search(r'<time[^>]*itemprop="startDate"[^>]*>([^<]+)</time>', b)
+        typ = re.search(r'<p class="type[^"]*">\s*([^<]+?)\s*</p>', b)
+        link = re.search(r'href="(https?://[^"]+/de/termine/[^"]+)"', b)
+        if not (name and tim):
+            continue
+        title = h.unescape(name.group(1)).strip()
+        tm_raw = tim.group(1).strip()
+        dm = re.match(r"(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s*,\s*(\d{1,2}:\d{2}(?:\s*-\s*\d{1,2}:\d{2})?))?", tm_raw)
+        if not dm or dm.group(2) == "27":
+            continue  # Zeitraum/Dauerausstellung (z. B. „29.05.2026 - 30.05.2027")
+        d = datetime.date(int(dm.group(3)), int(dm.group(2)), int(dm.group(1)))
+        if not in_window(d.isoformat()):
+            continue
+        if not is_kid_event(title, typ.group(1) if typ else ""):
+            continue
+        events.append(mk(d, dm.group(4) or "–", title, "Verkehrsmuseum Dresden",
+                         "siehe Detailseite", (typ.group(1).strip() if typ else ""),
+                         link.group(1) if link else U, "museum"))
+    return events
+
+
+PARSE_FNS = {
+    "kinolino": p_kinolino,
+    "muehle": p_muehle,
+    "tsd": p_tsd,
+    "zoo": p_zoo,
+    "tjg-api": p_tjg,
+    "august": p_august,
+    "vollmann-json": p_vollmann,
+    "schloesserland-list": p_schl_list,
+    "schloesserland-accordion": p_schl_acc,
+    "verkehrsmuseum": p_verkehrsmuseum,
+}
+
+
+# ============================ REGISTRY (README) ============================
+
+def read_registry():
+    md = open(README, encoding="utf-8").read()
+    m = re.search(r"## Datenquellen für den Kalender \(Registry\).*?```json\s*\n(.*?)\n```", md, re.S)
+    if not m:
+        sys.exit("REGISTRY nicht gefunden: README.md, Abschnitt '## Datenquellen für den Kalender (Registry)' mit JSON-Block.")
+    reg = json.loads(m.group(1))
+    return [r for r in reg if r.get("enabled", True)]
+
+
+def load_extra():
+    """calendar-extra.json: manuelle Events (Quellen ohne parsebare Seiten, z. B. bibo)
+    + optionale Anreicherung (gleiche d/t/title ersetzen live-Felder).
+    Format: {"$note": "...", "events": [ {...} ]}  ODER  [ {...}, ... ]
+    """
+    if not os.path.exists(EXTRA):
+        return []
+    try:
+        data = json.load(open(EXTRA, encoding="utf-8"))
+        return data.get("events", []) if isinstance(data, dict) else data
+    except Exception as e:
+        print(f"⚠️ calendar-extra.json fehlerhaft, ignoriert: {e}")
+        return []
+
+
+def main():
+    test_id = None
+    if "--test" in sys.argv:
+        test_id = sys.argv[sys.argv.index("--test") + 1]
+
+    registry = read_registry()
+    print(f"Registry: {len(registry)} aktive Quellen (aus README.md)")
+
+    all_events = []
+    stats = {}
+    for src in registry:
+        if test_id and src["id"] != test_id:
+            continue
+        parser = PARSE_FNS.get(src["parser"])
+        if parser is None:
+            print(f"  ⚠️ {src['id']}: unbekannter Parser '{src['parser']}' – übersprungen")
+            continue
+        try:
+            evs = parser(src)
+            stats[src["id"]] = len(evs)
+            all_events += evs
+            print(f"  ✓ {src['id']:<28} {len(evs):>3} Events")
+        except Exception as e:
+            stats[src["id"]] = f"FEHLER: {e}"
+            print(f"  ✗ {src['id']:<28} FEHLER: {e}")
+
+    extra = load_extra()
+    if not test_id:
+        print(f"  ✓ calendar-extra.json (manuell)      {len(extra):>3} Events")
+        all_events += extra
+
+    # Dedupe mit Vorrang für manuelle Events (calendar-extra):
+    # Gleiche (d, t, title, venue) → das manuelle Event gewinnt (reichere Daten).
+    for e in extra:
+        e["_extra"] = True
+    all_events.sort(key=lambda e: 0 if e.get("_extra") else 1)  # extra zuerst
     seen, out = set(), []
-    for e in events:
-        k = (e["d"], e["t"], e["title"])
-        if k not in seen:
-            seen.add(k)
-            out.append(e)
-    return out
+    for e in all_events:
+        k = (e["d"], e["t"], e["title"].lower(), e["venue"].lower())
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(e)
+    out.sort(key=lambda e: (e["d"], e["t"], e["title"]))
+    for e in out:
+        e.pop("_extra", None)
 
-# ---------- Manuell gepflegte Daten (Stand 14.10.2026) ----------
-def tsd():
-    B = "Technische Sammlungen (TSD)"
-    U = "https://tsd.de/programm/veranstaltungen/ferienprogramm"
-    A12 = "12–16 J."
-    entries = [
-        ("2026-10-14", "14:00–16:30", "Alles Trick – offenes Familienangebot", "offenes Angebot", "Museumseintritt", "Trickfilm-Workshop: Wie entsteht Bewegung aus Stillbildern? Ab Grundschulalter"),
-        ("2026-10-15", "14:00–16:30", "Alles Trick – offenes Familienangebot", "offenes Angebot", "Museumseintritt", "Trickfilm-Workshop, ab Grundschulalter"),
-        ("2026-10-16", "11:00–13:00", "Fotogramme – offenes Familienangebot", "offenes Angebot", "Museumseintritt", "Fotos ohne Kamera in der Dunkelkammer – eigene Fotogramme gestalten, ab Grundschulalter"),
-        ("2026-10-16", "14:00", "MITMALFILM-Workshop (KINOLINO)", "Anmeldung nötig (0351 488 7272)", "frei", "5–9 J., ca. 2 h, max. 1 Begleitperson pro Kind: eigenes Bild wird zum Trickfilm"),
-        ("2026-10-17", "13:00", "Party-Lights: LED-Lichtorgel bauen", "Anmeldung nötig (0351 488 7272)", "5 €", f"{A12}, 3 h Workshop"),
-        ("2026-10-18", "13:00–17:00", "Familientüfteln: Bürstenroboter & Ozobots (MACHwerk)", "offenes Angebot", "Museumseintritt", "Eigenen Bürstenroboter bauen oder Miniroboter Ozobots programmieren"),
-        ("2026-10-18", "14:00", "Farbenrausch: LED-Kreisel löten", "Anmeldung nötig (0351 488 7272)", "5 €", f"{A12}, 2 h Workshop"),
-        ("2026-10-18", "15:00", "Flimmerkino: Filmkonzert „Aschenputtel“ (KINOLINO)", "Anmeldung nötig (0351 488 7272)", "1 € + Museumseintritt", "4–10 J., Mitmach-Filmkonzert mit Live-Klavier – Silhouettenfilm"),
-        ("2026-10-20", "14:00", "Ferien-Show: Wasser, Seife, Luft", "Anmeldung nötig (0351 488 7272)", "5 €", "6–12 J., Science-Show, 1 h"),
-        ("2026-10-20", "14:00–16:30", "Alles Trick – offenes Familienangebot", "offenes Angebot", "Museumseintritt", "Trickfilm-Workshop, ab Grundschulalter"),
-        ("2026-10-21", "14:00", "Ferien-Show: Wasser, Seife, Luft", "Anmeldung nötig (0351 488 7272)", "5 €", "6–12 J., Science-Show, 1 h"),
-        ("2026-10-21", "14:00–16:30", "Alles Trick – offenes Familienangebot", "offenes Angebot", "Museumseintritt", "Trickfilm-Workshop, ab Grundschulalter"),
-        ("2026-10-22", "14:00–16:30", "Alles Trick – offenes Familienangebot", "offenes Angebot", "Museumseintritt", "Trickfilm-Workshop, ab Grundschulalter"),
-        ("2026-10-23", "14:00–16:30", "Fotogramme – offenes Familienangebot", "offenes Angebot", "Museumseintritt", "Fotos ohne Kamera in der Dunkelkammer, ab Grundschulalter"),
-        ("2026-10-24", "9:30–16:30", "3D-Druck für Anfänger*innen (Code Week)", "Anmeldung nötig (0351 488 7272)", "frei (Verpflegung inkl.)", "nur für Mädchen 12–16 J., TinkerCAD + 3D-Druck"),
-        ("2026-10-24", "13:00", "Party-Lights: LED-Lichtorgel bauen", "Anmeldung nötig (0351 488 7272)", "5 €", f"{A12}, 3 h Workshop"),
-        ("2026-10-24", "13:00–18:00", "ABSCHIEDSFEST TSD", "offen", "Museumseintritt", "Großes Abschiedsfest am letzten Oktober-Wochenende – danach Schließung zur Sanierung!"),
-        ("2026-10-25", "13:00–17:00", "Familientüfteln: Pixel-Art (MACHwerk)", "offenes Angebot", "Museumseintritt", "Eigene Pixel-Art entwerfen und mit LEGO®-Steinen drucken"),
-        ("2026-10-25", "14:00", "Farbenrausch: LED-Kreisel löten", "Anmeldung nötig (0351 488 7272)", "5 €", f"{A12}, 2 h Workshop"),
+    if test_id:
+        print(f"\nTEST {test_id}: {len(out)} Events")
+        for e in out:
+            print(f"  {e['d']} {e['t']:<12} {e['title'][:55]} | {e['venue'][:40]}")
+        return
+
+    def jse(s):
+        return str(s).replace("\\", "\\\\").replace('"', '\\"')
+
+    active = [s["id"] for s in registry]
+    lines = [
+        "// GENERIERT von scripts/generate-calendar.py – nicht von Hand editieren!",
+        f"// Quellen: Registry in README.md ({len(active)} Quellen) + calendar-extra.json (Stand {TODAY.isoformat()})",
+        "const CALENDAR_EVENTS = [",
     ]
-    return [{"d": d, "t": t, "title": ti, "venue": B, "cost": c,
-             "note": f"{n} · {b}", "url": U, "cat": "tsd"} for d, t, ti, b, c, n in entries]
+    for i, e in enumerate(out):
+        comma = "," if i < len(out) - 1 else ""
+        lines.append(
+            f'  {{ d: "{e["d"]}", t: "{jse(e["t"])}", title: "{jse(e["title"])}", '
+            f'venue: "{jse(e["venue"])}", cost: "{jse(e["cost"])}", '
+            f'note: "{jse(e["note"])}", url: "{jse(e["url"])}", cat: "{jse(e["cat"])}" }}{comma}'
+        )
+    lines.append("];")
+    open(OUT, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    print(f"\ngesamt: {len(out)} unique Events → {OUT}")
+    bad = [k for k, v in stats.items() if isinstance(v, str)]
+    if bad or not out:
+        sys.exit(1)
 
-def bibo():
-    U = "https://www.bibo-dresden.de/de/veranstaltungen/kinderveranstaltungen/Herbstferienprogramm.php"
-    entries = [
-        ("2026-10-14", "14:00–17:00", "Maker-Mittwoch (offen) – Gorbitz", "Bibliothek Gorbitz, Merianplatz 4", "frei", "Lego programmieren · 14.10. ohne Betreuung"),
-        ("2026-10-14", "14:00–18:00", "MakerBox (offen) – Gruna & Johannstadt", "Bibl. Gruna / Bibl. Johannstadt", "frei", "ab 3 J., Roboter, Kugelbahn, Lego – ohne Anm."),
-        ("2026-10-15", "9:00–12:00", "Scratch Junior (Code Week)", "Bibl. Leubnitz-Neuostra, Corinthstr. 8", "frei", "6–9 J., Anmeldung: leubnitz-neuostra@bibo-dresden.de"),
-        ("2026-10-15", "10:00–13:00", "Game-Design: Point'n'Click Adventure (Code Week)", "Bibl. Gruna, Papstdorfer Str. 13", "frei", "10–16 J., Anmeldung: 0351/2561037"),
-        ("2026-10-20", "9:30–12:30", "Der magische Stift (2-Tage-Workshop)", "Bibl. Strehlen, Otto-Dix-Ring 61", "frei", "8–10 J., Anmeldung: strehlen-odc@bibo-dresden.de"),
-        ("2026-10-21", "9:30–12:30", "Der magische Stift (Tag 2)", "Bibl. Strehlen, Otto-Dix-Ring 61", "frei", "8–10 J., Fortsetzung des Workshops"),
-        ("2026-10-21", "14:00–18:00", "MakerBox (offen) – Neustadt", "Bibl. Neustadt, Königsbrücker Str. 26", "frei", "ab 3 J., ohne Anm."),
-        ("2026-10-21", "15:00–16:30", "Maker-Mittwoch (offen, mit Personal) – Gorbitz", "Bibliothek Gorbitz, Merianplatz 4", "frei", "VR-Brillen, Nintendo Switch, Sphero-Roboter"),
-        ("2026-10-23", "ganz tags", "Gaming-Geheimtipps mit Gregor Kartsios (Rocket Beans)", "Zentralbibliothek im Kulturpalast", "frei", "Videospiele-Abenteuer für Groß & Klein, Uhrzeit auf der Bibo-Seite"),
-    ]
-    return [{"d": d, "t": t, "title": ti, "venue": f"bibo · {addr.split(',')[0]}",
-             "cost": c, "note": n, "url": U, "cat": "bibo"} for d, t, ti, addr, c, n in entries]
 
-def zoo():
-    out = []
-    d = datetime.date(2026, 10, 10)
-    while d <= datetime.date(2026, 10, 25):
-        iso = d.isoformat()
-        out.append({"d": iso, "t": "ab 11:00", "title": "Reviertreffpunkte & Fütterungen", "venue": "Zoo Dresden",
-                    "cost": "inkl. Zoo-Eintritt", "note": "Täglich, kostenlos, ohne Anm. – mit Quiz-Rallye",
-                    "url": "https://www.zoo-dresden.de/besuch-planen/treffpunkte-fuetterungen/", "cat": "zoo"})
-        if d.weekday() in (1, 3, 5, 6):  # Di, Do, Sa, So
-            out.append({"d": iso, "t": "10:30/11:30/14:30/16:00", "title": "Zookasper", "venue": "Zoo Dresden (Kasperhaus)",
-                        "cost": "inkl. Zoo-Eintritt", "note": "Kasperletheater bis Ende Oktober",
-                        "url": "https://www.zoo-dresden.de/fuer-kinder/", "cat": "zoo"})
-        d += datetime.timedelta(days=1)
-    out.append({"d": "2026-10-10", "t": "8:30–17:30", "title": "Herbstferien im Zoo (10.–25.10.)", "venue": "Zoo Dresden",
-                "cost": "Zoo-Eintritt", "note": "Ferienprogramm: Aktionen & Zooschule, Details auf der Zoo-Website",
-                "url": "https://www.zoo-dresden.de/aktuelles/veranstaltungen/", "cat": "zoo"})
-    out.append({"d": "2026-10-31", "t": "10:00–18:30", "title": "Halloween im Zoo", "venue": "Zoo Dresden",
-                "cost": "Zoo-Eintritt", "note": "Zauberhaftes Halloween-Event im Zoo",
-                "url": "https://www.zoo-dresden.de/aktuelles/veranstaltungen/", "cat": "zoo"})
-    return out
-
-# ---------- Zusammenbau ----------
-kinolino = parse_kinolino()
-muehle = zschoner()
-tsd_l = tsd()
-bibo_l = bibo()
-zoo_l = zoo()
-all_events = kinolino + muehle + tsd_l + bibo_l + zoo_l
-all_events.sort(key=lambda e: (e["d"], e["t"]))
-print(f"KINOLINO: {len(kinolino)}, Mühle: {len(muehle)}, TSD: {len(tsd_l)}, Bibo: {len(bibo_l)}, Zoo: {len(zoo_l)} → gesamt {len(all_events)}")
-
-def js_escape(s):
-    return s.replace("\\", "\\\\").replace('"', '\\"')
-
-today = datetime.date.today().isoformat()
-lines = [
-    "// GENERIERT von scripts/generate-calendar.py – nicht von Hand editieren!",
-    f"// Live-Quellen: kinolino.de/programm, zschoner-muehle.de/puppentheater · manuell: TSD, Bibo, Zoo (Stand 14.10.2026)",
-    "const CALENDAR_EVENTS = [",
-]
-for i, e in enumerate(all_events):
-    comma = "," if i < len(all_events) - 1 else ""
-    lines.append(
-        f'  {{ d: "{e["d"]}", t: "{js_escape(e["t"])}", title: "{js_escape(e["title"])}", '
-        f'venue: "{js_escape(e["venue"])}", cost: "{js_escape(e["cost"])}", '
-        f'note: "{js_escape(e["note"])}", url: "{e["url"]}", cat: "{e["cat"]}" }}{comma}'
-    )
-lines.append("];")
-open(OUT, "w", encoding="utf-8").write("\n".join(lines) + "\n")
-print("calendar-data.js geschrieben:", OUT)
-if not all_events:
-    sys.exit(1)
+if __name__ == "__main__":
+    main()
