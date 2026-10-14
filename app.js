@@ -3,7 +3,6 @@ const CATEGORIES = {
   zoo: "Zoo & Tiere",
   bibliothek: "Bibliothek",
   park: "Park & Garten",
-  baden: "Bad",
   umkreis: "Umkreis",
   event: "Special Event"
 };
