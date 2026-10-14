@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dresden for Kids – Events &amp; Ausflüge für Kinder</title>
+  <meta name="description" content="Kuratierte Liste mit Events, Museen, Bibliotheken, Zoo & Ausflügen für Kinder in und um Dresden.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎪</text></svg>">
+</head>
+<body>
+  <header class="hero">
+    <div class="container">
+      <h1>🎪 Dresden <span class="accent">for Kids</span></h1>
+      <p class="tagline">Events, Museen, Bibliotheken &amp; Ausflüge für Kinder in und um Dresden – kuratiert, geprüft, kostenlos nutzbar.</p>
+      <div class="filters" id="filters">
+        <button class="filter-btn active" data-filter="alle">Alle</button>
+        <button class="filter-btn" data-filter="museum">🏛️ Museen &amp; Kultur</button>
+        <button class="filter-btn" data-filter="zoo">🦁 Zoo &amp; Tiere</button>
+        <button class="filter-btn" data-filter="bibliothek">📚 Bibliotheken</button>
+        <button class="filter-btn" data-filter="park">🌳 Parks &amp; Gärten</button>
+        <button class="filter-btn" data-filter="umkreis">🚗 Umkreis</button>
+        <button class="filter-btn" data-filter="event">🎉 Special Events</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <p class="disclaimer">⚠️ Alle Angaben ohne Gewähr (Stand: <span id="checked">–</span>). Öffnungszeiten &amp; Preise können sich ändern – vor dem Ausflug kurz auf der Website nachschauen.</p>
+    <section id="cards" class="grid"></section>
+  </main>
+
+  <footer class="container footer">
+    <p>Mit ❤️ für Dresdner Familien gebaut · <a href="https://github.com/Alex-Molt/DresdenForKids">GitHub</a> · Neue Event? <a href="https://github.com/Alex-Molt/DresdenForKids/blob/main/README.md#neues-event-hinzufügen">Eintrag in <code>events.js</code></a> – einfach PR oder direkt Push.</p>
+  </footer>
+
+  <script src="events.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
