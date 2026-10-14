@@ -44,7 +44,7 @@ Nach Merge in `main` deployt der GitHub-Pages-Workflow automatisch.
 ```js
 {
   name: "Name des Ortes / Events",
-  category: "museum", // museum | zoo | bibliothek | park | baden | umkreis | event
+  category: "museum", // museum | zoo | bibliothek | park | umkreis | event
   age: "Gut ab ca. X Jahren",
   address: "Straße, PLZ Ort",
   hours: "Di–Fr 9–17 Uhr …",
@@ -73,7 +73,6 @@ Nach Merge in `main` deployt der GitHub-Pages-Workflow automatisch.
 | `zoo` | 🦁 Zoo & Tiere |
 | `bibliothek` | 📚 Bibliotheken |
 | `park` | 🌳 Parks & Gärten |
-| `baden` | 💦 Bäder |
 | `umkreis` | 🚗 Umkreis (max. ~1,5 h) |
 | `event` | 🎉 Special Events / Ferienprogramme |
 
