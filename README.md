@@ -91,11 +91,12 @@ Der Generator (`scripts/generate-calendar.py`) liest **nur** diese Liste. Neue Q
   {"id": "nossen", "parser": "schloesserland-list", "url": "https://www.schloss-nossen.de/de/veranstaltungen-ausstellungen/", "venue": "Schloss Nossen", "cat": "umkreis", "enabled": true, "note": "grid-list-item-Layout"},
   {"id": "albrechtsburg", "parser": "schloesserland-list", "url": "https://www.albrechtsburg-meissen.de/de/veranstaltungen-ausstellungen/", "venue": "Albrechtsburg Meissen", "cat": "umkreis", "enabled": true, "note": "grid-list-item-Layout"},
   {"id": "zwinger", "parser": "schloesserland-list", "url": "https://www.der-dresdner-zwinger.de/de/dresdner-zwinger/veranstaltungen-ausstellungen/", "venue": "Dresdner Zwinger", "cat": "museum", "enabled": true, "note": "grid-list-item-Layout; u. a. Kinderkonzerte im Wallpavillon"},
-  {"id": "oskarshausen", "parser": null, "url": "https://www.oskarshausen.de/events/", "venue": "Oskarshausen (Freital)", "cat": "umkreis", "enabled": true, "kind": "browser", "note": "JS-only, keine Termine im HTML → Events via Browser-Check in calendar-extra.json (z. B. Schaudrechseln, Frühstück am So., Gruselhausen)"}
+  {"id": "oskarshausen", "parser": null, "url": "https://www.oskarshausen.de/events/", "venue": "Oskarshausen (Freital)", "cat": "umkreis", "enabled": true, "kind": "browser", "note": "JS-only, keine Termine im HTML → Events via Browser-Check in calendar-extra.json (z. B. Schaudrechseln, Frühstück am So., Gruselhausen)"},
+  {"id": "codeweek", "parser": "codeweek", "url": "https://crossmediatour.de/codeweek2026/", "venue": "Code Week Dresden (diverse Orte)", "cat": "event", "enabled": true, "note": "CrossMedia Tour e.V. koordiniert die Code Week; kurstermin-panel-Blöcke (Titel/Datum/Ort) + Detailseite (Uhrzeit, Altersempfehlung). Saisonsseite – bei neuen Code Weeks (z. B. Winterferien) URL hier per PR tauschen."}
 ]
 ```
 
-**Parser-Schlüssel (`PARSE_FNS` in `scripts/generate-calendar.py`):** `kinolino`, `muehle`, `tsd`, `zoo`, `tjg-api`, `august`, `vollmann-json`, `schloesserland-list` (grid-list-item), `schloesserland-accordion` (Venue-Seite), `verkehrsmuseum`. Neue Parser: Funktion mit Signatur `def p_name(src) -> [event-dicts]` schreiben und in `PARSE_FNS` eintragen.
+**Parser-Schlüssel (`PARSE_FNS` in `scripts/generate-calendar.py`):** `kinolino`, `muehle`, `tsd`, `zoo`, `tjg-api`, `august`, `vollmann-json`, `schloesserland-list` (grid-list-item), `schloesserland-accordion` (Venue-Seite), `verkehrsmuseum`, `codeweek` (CrossMedia-Tour-Kurs-Liste + Detailseiten). Neue Parser: Funktion mit Signatur `def p_name(src) -> [event-dicts]` schreiben und in `PARSE_FNS` eintragen.
 
 **Event-Format (wird in `calendar-data.js` geschrieben):** `{"d": "YYYY-MM-DD", "t": "HH:MM", "title": …, "venue": …, "cost": …, "note": …, "url": …, "cat": "tsd|zoo|bibo|kinolino|muehle|theater|museum|umkreis|event"}`
 

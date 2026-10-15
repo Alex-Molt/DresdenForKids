@@ -453,6 +453,65 @@ def p_verkehrsmuseum(src):
     return events
 
 
+# ============================ CODE WEEK (CrossMedia Tour) ============================
+
+def p_codeweek(src):
+    """Code Week Dresden (CrossMedia Tour e.V.): pro Kurs-Panel
+    <h3.wp-block-post-title><a href>Titel</a></h3> + 2x <h6><span.value> (Datum, Ort).
+    Mehr-tägige Kurse: '15.10. – 16.10.26'. Detailseite: Uhrzeit + Altersempfehlung."""
+    U = src["url"]
+    raw = raw_fetch(U)
+    segs = re.split(r'kurstermin-panel', raw)[1:]
+    events, seen = [], set()
+    for s in segs:
+        mt = re.search(r'<h3[^>]*wp-block-post-title[^>]*>\s*<a href="([^"]+)"[^>]*>([^<]+)</a>', s)
+        if not mt:
+            continue
+        url_c, title = mt.group(1), h.unescape(mt.group(2)).strip()
+        vals = re.findall(r'<h6[^>]*is-dynamic-field[^>]*>\s*<span class="value">\s*(.*?)\s*</span>\s*</h6>', s)
+        if len(vals) < 2:
+            continue
+        dstr, venue = h.unescape(vals[0]).strip(), h.unescape(vals[1]).strip()
+        # '15.10.26' oder '15.10. – 16.10.26'
+        dm = re.match(r"(\d{1,2})\.(\d{1,2})\.\s*(?:–|-|&#8211;)?\s*(?:(\d{1,2})\.(\d{1,2})\.)?(\d{2})", dstr.replace("&#8211;", "–"))
+        if not dm:
+            continue
+        y = 2000 + int(dm.group(5))
+        d = datetime.date(y, int(dm.group(2)), int(dm.group(1)))
+        if not in_window(d.isoformat()):
+            continue
+        rng = ""
+        if dm.group(3):
+            d_end = datetime.date(y, int(dm.group(4)), int(dm.group(3)))
+            rng = f"–{d_end.day:02d}.{d_end.month:02d}"
+        key = (d.isoformat(), title, venue)
+        if key in seen:
+            continue
+        seen.add(key)
+        # Detailseite: Uhrzeit + Altersempfehlung (Fehler → "–", Kurs bleibt gelistet)
+        tm, age = "–", ""
+        try:
+            dtxt = fetch(url_c)
+            # Zeit: 'HH:MM – HH:MM [Uhr]' (Uhr optional, auch bei 'Mo bis Fr 10:00 – 15:00')
+            mtm = re.search(r"(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})(?:\s*Uhr)?", dtxt)
+            if not mtm:
+                mtm = re.search(r"(\d{1,2}:\d{2})\s*Uhr", dtxt)
+            if mtm:
+                tm = mtm.group(1) + (f" - {mtm.group(2)}" if mtm.group(2) else "")
+            mage = re.search(r"Altersempfehlung(?:\svon)?\s+([\d,– ]{1,20}?)\s*(?:Jahren|Jahre)\b", dtxt)
+            if mage:
+                age = mage.group(1).strip().rstrip(",")
+        except Exception:
+            pass
+        note = "Code Week Dresden · kostenlos · CrossMedia Tour e.V."
+        if age:
+            note = f"Alter: {age} J. · {note}"
+        if rng:
+            note += f" · {d.day:02d}.{d.month:02d}{rng}"
+        events.append(mk(d, tm, title, venue, "frei", note, url_c, "event"))
+    return events
+
+
 PARSE_FNS = {
     "kinolino": p_kinolino,
     "muehle": p_muehle,
@@ -464,6 +523,7 @@ PARSE_FNS = {
     "schloesserland-list": p_schl_list,
     "schloesserland-accordion": p_schl_acc,
     "verkehrsmuseum": p_verkehrsmuseum,
+    "codeweek": p_codeweek,
 }
 
 
