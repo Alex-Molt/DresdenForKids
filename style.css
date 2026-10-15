@@ -64,16 +64,6 @@ a { color: var(--accent-ink); }
   border-radius: 6px;
 }
 
-.visually-hidden {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* ---------- Hero / Kopfbereich ---------- */
 .hero {
   position: relative;
@@ -255,7 +245,9 @@ main.container { padding-top: 26px; padding-bottom: 48px; }
   letter-spacing: 0.01em;
   padding: 4px 11px;
   border-radius: 999px;
+  background: var(--accent-soft);
   background: color-mix(in srgb, var(--c, var(--accent)) 13%, #fff);
+  color: var(--accent-ink);
   color: color-mix(in srgb, var(--c, var(--accent)) 70%, #000);
   white-space: nowrap;
 }
@@ -381,6 +373,7 @@ code {
 }
 .cat-chip:hover { border-color: var(--c, var(--accent)); }
 .cat-chip[aria-pressed="true"] {
+  background: var(--accent-soft);
   background: color-mix(in srgb, var(--c, var(--accent)) 12%, #fff);
   border-color: var(--c, var(--accent));
 }

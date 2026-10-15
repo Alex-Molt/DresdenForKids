@@ -19,6 +19,12 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
+// Nur http(s)-Links rendern (Daten sind intern gepflegt, aber als
+// Review-Standard: kein javascript:/data:-Schemata in href)
+function safeUrl(u) {
+  return /^https?:\/\//i.test(String(u || "").trim()) ? u : null;
+}
+
 function fmtDate(iso) {
   if (!iso) return "–";
   const [y, m, d] = iso.split("-");
@@ -45,8 +51,9 @@ function render(filter) {
     ].filter(Boolean).join("");
 
     const note = e.note ? `<div class="note">${esc(e.note)}</div>` : "";
-    const link = e.url
-      ? `<a class="card-link" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${esc(e.urlLabel || "Website")} →</a>`
+    const url = safeUrl(e.url);
+    const link = url
+      ? `<a class="card-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(e.urlLabel || "Website")} →</a>`
       : "";
 
     const card = document.createElement("article");

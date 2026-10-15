@@ -40,6 +40,11 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
+// Nur http(s)-Links rendern (kein javascript:/data:-Schemata in href)
+function safeUrl(u) {
+  return /^https?:\/\//i.test(String(u || "").trim()) ? u : null;
+}
+
 // Feld vorhanden & sinnvoll? (leere Strings, undefined und reine Platzhalter raus)
 function has(v) {
   if (v == null) return false;
@@ -48,7 +53,13 @@ function has(v) {
 }
 
 const T0 = todayISO();
-const TOMORROW = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+// "Morgen" aus dem LOKALEN Datum rechnen (toISOString() ist UTC →
+// zwischen Mitternacht und ~1-2 Uhr Ortszeit sonst falsch)
+const _tmr = new Date();
+_tmr.setDate(_tmr.getDate() + 1);
+const TOMORROW = _tmr.getFullYear() + "-" +
+  String(_tmr.getMonth() + 1).padStart(2, "0") + "-" +
+  String(_tmr.getDate()).padStart(2, "0");
 
 // Einmalig: kommende Events nach Tag gruppieren und je Tag nach Zeit sortieren
 const upcoming = (typeof CALENDAR_EVENTS !== "undefined" ? CALENDAR_EVENTS : [])
@@ -65,12 +76,16 @@ for (const d in byDay) byDay[d].sort((a, b) => sortKey(a.t).localeCompare(sortKe
 
 const dayNames = Object.keys(byDay).sort();
 
-// Aktive Kategorien (anfangs alle, aber nur die wirklich vorkommenden sind klickbar relevant)
-const activeCats = new Set(Object.keys(CAT_LABELS));
+// Kategorien, die in den kommenden Events VORKOMMEN (aus den Daten,
+// nicht aus CAT_LABELS — neue cat-Werte aus der Registry fallen nicht
+// still durchs Raster; Label mit Fallback)
+const presentCats = [...new Set(upcoming.map(e => e.cat).filter(Boolean))];
+const activeCats = new Set(presentCats);
 
 const legendEl = document.getElementById("cal-legend");
 const wrap = document.getElementById("cal-days");
 const countEl = document.getElementById("count");
+const countTotalEl = document.getElementById("count-total");
 const checkedEl = document.getElementById("checked");
 
 // "Stand" = neuestes Datum in der Datenquelle
@@ -82,10 +97,12 @@ if (newestAll) {
     nd.getDate() + "." + String(nd.getMonth() + 1).padStart(2, "0") + "." + nd.getFullYear();
 }
 
-// Legende aufbauen – alle 9 Kategorien aus CAT_LABELS
+// Legende aufbauen – nur Kategorien, die in den Daten vorkommen.
+// Label aus CAT_LABELS, sonst Fallback auf den rohen Wert (neue
+// cat-Werte aus der Registry fallen nicht still durchs Raster).
 function buildLegend() {
-  legendEl.innerHTML = Object.entries(CAT_LABELS).map(([key, label]) =>
-    `<button type="button" class="cat-chip cat-${key}" data-cat="${key}" aria-pressed="true">${esc(label)}</button>`
+  legendEl.innerHTML = presentCats.map(cat =>
+    `<button type="button" class="cat-chip cat-${esc(cat)}" data-cat="${esc(cat)}" aria-pressed="true">${esc(CAT_LABELS[cat] || cat)}</button>`
   ).join("");
 }
 
@@ -115,8 +132,9 @@ function renderDays() {
       if (has(e.venue)) parts.push(`<p class="cal-meta cal-venue"><span class="ic" aria-hidden="true">📍</span><span>${esc(e.venue)}</span></p>`);
       if (has(e.cost))  parts.push(`<p class="cal-meta cal-cost"><span class="ic" aria-hidden="true">💶</span><span>${esc(e.cost)}</span></p>`);
       if (has(e.note))  parts.push(`<p class="cal-meta cal-note"><span class="ic" aria-hidden="true">ℹ️</span><span>${esc(e.note)}</span></p>`);
-      const link = has(e.url)
-        ? `<a class="cal-link" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">Details →</a>`
+      const url = safeUrl(e.url);
+      const link = url
+        ? `<a class="cal-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Details →</a>`
         : "";
       const time = has(e.t) ? esc(e.t) : "–";
 
@@ -141,6 +159,7 @@ function renderDays() {
     wrap.innerHTML = html;
   }
   countEl.textContent = visible;
+  if (countTotalEl) countTotalEl.textContent = upcoming.length;
 }
 
 legendEl.addEventListener("click", (ev) => {
