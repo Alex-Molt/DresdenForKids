@@ -1,14 +1,29 @@
+/* Startseite: Orts-/Event-Karten aus EVENTS rendern + Kategorie-Filter */
+
 const CATEGORIES = {
-  museum: "Museum & Kultur",
-  zoo: "Zoo & Tiere",
-  bibliothek: "Bibliothek",
-  park: "Park & Garten",
-  umkreis: "Umkreis",
-  event: "Special Event"
+  museum:     { label: "Museum & Kultur", icon: "🏛️" },
+  zoo:        { label: "Zoo & Tiere",     icon: "🦁" },
+  bibliothek: { label: "Bibliothek",      icon: "📚" },
+  park:       { label: "Park & Garten",   icon: "🌳" },
+  umkreis:    { label: "Umkreis",         icon: "🚗" },
+  event:      { label: "Special Event",   icon: "🎉" }
 };
 
 const grid = document.getElementById("cards");
 const checkedEl = document.getElementById("checked");
+const filterBar = document.getElementById("filters");
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Nur http(s)-Links rendern (Daten sind intern gepflegt, aber als
+// Review-Standard: kein javascript:/data:-Schemata in href)
+function safeUrl(u) {
+  return /^https?:\/\//i.test(String(u || "").trim()) ? u : null;
+}
 
 function fmtDate(iso) {
   if (!iso) return "–";
@@ -19,43 +34,49 @@ function fmtDate(iso) {
 function render(filter) {
   const items = filter === "alle" ? EVENTS : EVENTS.filter(e => e.category === filter);
   grid.innerHTML = "";
+
   if (items.length === 0) {
     grid.innerHTML = '<p class="empty">Keine Einträge in dieser Kategorie – noch!</p>';
     return;
   }
+
   for (const e of items) {
-    const card = document.createElement("article");
-    card.className = "card";
+    const meta = CATEGORIES[e.category] || { label: e.category, icon: "📌" };
     const facts = [
-      e.age && `<div><span class="label">Alter</span>${e.age}</div>`,
-      e.address && `<div><span class="label">Adresse</span>${e.address}</div>`,
-      e.hours && `<div><span class="label">Öffnungszeiten</span>${e.hours}</div>`,
-      e.price && `<div><span class="label">Kosten</span>${e.price}</div>`,
-      e.booking && `<div><span class="label">Anmeldung</span>${e.booking}</div>`
+      e.age     && `<div><span class="label">Alter</span><span class="val">${esc(e.age)}</span></div>`,
+      e.address && `<div><span class="label">Adresse</span><span class="val">${esc(e.address)}</span></div>`,
+      e.hours   && `<div><span class="label">Öffnungszeiten</span><span class="val">${esc(e.hours)}</span></div>`,
+      e.price   && `<div><span class="label">Kosten</span><span class="val">${esc(e.price)}</span></div>`,
+      e.booking && `<div><span class="label">Anmeldung</span><span class="val">${esc(e.booking)}</span></div>`
     ].filter(Boolean).join("");
-    const note = e.note ? `<div class="note">${e.note}</div>` : "";
-    const link = e.url
-      ? `<a class="card-link" href="${e.url}" target="_blank" rel="noopener noreferrer">${e.urlLabel || "Website"} →</a>`
+
+    const note = e.note ? `<div class="note">${esc(e.note)}</div>` : "";
+    const url = safeUrl(e.url);
+    const link = url
+      ? `<a class="card-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(e.urlLabel || "Website")} →</a>`
       : "";
+
+    const card = document.createElement("article");
+    card.className = `card cat-${e.category}`;
     card.innerHTML = `
       <div class="card-top">
-        <span class="cat-badge">${CATEGORIES[e.category] || e.category}</span>
+        <span class="cat-badge">${meta.icon} ${esc(meta.label)}</span>
       </div>
-      <h2>${e.name}</h2>
-      <p class="highlight">${e.highlight || ""}</p>
+      <h2>${esc(e.name)}</h2>
+      ${e.highlight ? `<p class="highlight">${esc(e.highlight)}</p>` : ""}
       ${note}
-      <div class="facts">${facts}</div>
+      ${facts ? `<div class="facts">${facts}</div>` : ""}
       ${link}
     `;
     grid.appendChild(card);
   }
 }
 
-document.getElementById("filters").addEventListener("click", (ev) => {
+filterBar.addEventListener("click", (ev) => {
   const btn = ev.target.closest(".filter-btn");
   if (!btn) return;
-  document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
+  filterBar.querySelectorAll(".filter-btn").forEach(b => b.setAttribute("aria-pressed", "false"));
+  btn.setAttribute("aria-pressed", "true");
   render(btn.dataset.filter);
 });
 

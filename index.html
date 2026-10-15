@@ -13,26 +13,34 @@
     <div class="container">
       <h1>🎪 Dresden <span class="accent">for Kids</span></h1>
       <p class="tagline">Events, Museen, Bibliotheken &amp; Ausflüge für Kinder in und um Dresden – kuratiert, geprüft, kostenlos nutzbar.</p>
-      <div class="filters" id="filters">
-        <a class="filter-btn calendar-link" href="kalender.html">📅 Tages-Kalender →</a>
-        <button class="filter-btn active" data-filter="alle">Alle</button>
-        <button class="filter-btn" data-filter="museum">🏛️ Museen &amp; Kultur</button>
-        <button class="filter-btn" data-filter="zoo">🦁 Zoo &amp; Tiere</button>
-        <button class="filter-btn" data-filter="bibliothek">📚 Bibliotheken</button>
-        <button class="filter-btn" data-filter="park">🌳 Parks &amp; Gärten</button>
-        <button class="filter-btn" data-filter="umkreis">🚗 Umkreis</button>
-        <button class="filter-btn" data-filter="event">🎉 Special Events</button>
+
+      <nav class="hero-nav" aria-label="Seiten">
+        <a class="nav-link is-current" href="index.html" aria-current="page">📍 Orte &amp; Events</a>
+        <a class="nav-link" href="kalender.html">📅 Tages-Kalender</a>
+      </nav>
+
+      <div class="filters-wrap">
+        <span class="filters-label" id="filters-label">Nach Kategorie filtern</span>
+        <div class="filters" id="filters" role="group" aria-labelledby="filters-label">
+          <button class="filter-btn" data-filter="alle" aria-pressed="true">Alle</button>
+          <button class="filter-btn" data-filter="museum" aria-pressed="false">🏛️ Museen &amp; Kultur</button>
+          <button class="filter-btn" data-filter="zoo" aria-pressed="false">🦁 Zoo &amp; Tiere</button>
+          <button class="filter-btn" data-filter="bibliothek" aria-pressed="false">📚 Bibliotheken</button>
+          <button class="filter-btn" data-filter="park" aria-pressed="false">🌳 Parks &amp; Gärten</button>
+          <button class="filter-btn" data-filter="umkreis" aria-pressed="false">🚗 Umkreis</button>
+          <button class="filter-btn" data-filter="event" aria-pressed="false">🎉 Special Events</button>
+        </div>
       </div>
     </div>
   </header>
 
   <main class="container">
-    <p class="disclaimer">⚠️ Alle Angaben ohne Gewähr (Stand: <span id="checked">–</span>). Öffnungszeiten &amp; Preise können sich ändern – vor dem Ausflug kurz auf der Website nachschauen.</p>
+    <p class="disclaimer">⚠️ Alle Angaben ohne Gewähr (Stand: <span id="checked">–</span>). Öffnungszeiten &amp; Preise können sich ändern – vor dem Ausflug am besten kurz auf der Website nachschauen.</p>
     <section id="cards" class="grid"></section>
   </main>
 
   <footer class="container footer">
-    <p>Mit ❤️ für Dresdner Familien gebaut · <a href="https://github.com/Alex-Molt/DresdenForKids">GitHub</a> · Neues Event? <a href="https://github.com/Alex-Molt/DresdenForKids/blob/main/README.md#neue-location--karte-startseite">Eintrag in <code>events.js</code></a> – nur per Pull Request.</p>
+    <p>Mit ❤️ für Dresdner Familien gebaut · <a href="https://github.com/Alex-Molt/DresdenForKids">GitHub</a> · Neues Event? Trag es in <a href="https://github.com/Alex-Molt/DresdenForKids/blob/main/README.md#neue-location--karte-startseite"><code>events.js</code></a> ein – Änderungen laufen ausschließlich über einen Pull Request.</p>
   </footer>
 
   <script src="events.js"></script>
