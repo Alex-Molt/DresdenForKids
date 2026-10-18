@@ -75,7 +75,15 @@ def infer_year(day, month, ref=TODAY):
     return ref.year + 1
 
 
+# Veranstaltungenstypen, die per Definition nicht kindgerecht sind
+# (auch wenn "Familie" etc. im Titel steht, z. B. Vortrag über die
+# "Familie Simson" – das ist der Herstellername, kein Familien-Event).
+ADULT_TYPE_RE = re.compile(r"vortrag|podiumsgespräch|symposium|fishbowl|unterhausdebatte|verkehrswende-duell", re.I)
+
+
 def is_kid_event(title, cats=""):
+    if ADULT_TYPE_RE.search(cats):
+        return False
     return bool(KID_RE.search(title) or KID_RE.search(cats))
 
 
