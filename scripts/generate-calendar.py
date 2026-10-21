@@ -35,7 +35,13 @@ def raw_fetch(url, referer=None):
         headers["Referer"] = referer
     req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=40, context=ctx) as r:
-        return r.read().decode("utf-8", "ignore")
+        raw = r.read().decode("utf-8", "ignore")
+    # Wartungsseiten (HTTP 200, kein Event-Content): als Fehler behandeln,
+    # damit der Backfill greift statt 0 Events in den Kalender zu schreiben.
+    if "Wartungsarbeiten ist diese Seite momentan nicht erreichbar" in raw \
+            or "Site down due to maintenance" in raw:
+        raise RuntimeError("Quelle im Wartungsmodus (Maintenance-Page)")
+    return raw
 
 
 def to_text(raw):
@@ -561,6 +567,35 @@ def load_extra():
         return []
 
 
+def load_prev(path):
+    """Vorheriges calendar-data.js (veröffentlichte Events) aus den JS-Zeilen
+    parsen – für den Backfill, wenn eine Live-Quelle fehlt. Fehlende Felder
+    (z. B. cost/note) kommen als leerer String zurück."""
+    if not os.path.exists(path):
+        return []
+    out = []
+    try:
+        raw = open(path, encoding="utf-8").read()
+    except Exception:
+        return []
+    for m in re.finditer(
+        r'\{\s*d:\s*"([^"]+)"\s*,\s*t:\s*"([^"]*)"\s*,\s*title:\s*"((?:[^"\\]|\\.)*)"\s*,'
+        r'\s*venue:\s*"((?:[^"\\]|\\.)*)"\s*,\s*cost:\s*"((?:[^"\\]|\\.)*)"\s*,'
+        r'\s*note:\s*"((?:[^"\\]|\\.)*)"\s*,\s*url:\s*"((?:[^"\\]|\\.)*)"\s*,'
+        r'\s*cat:\s*"((?:[^"\\]|\\.)*)"\s*\}',
+        raw, re.S):
+        d, t, title, venue, cost, note, url, cat = m.groups()
+
+        def un(s):
+            # jse() escapet nur \ → \\ und " → \" – Single-Pass-Rückgängig
+            # (zwei sequentielle replaces würden \"-Sequenzen brechen).
+            return re.sub(r"\\(.)", r"\1", s)
+
+        out.append({"d": d, "t": t, "title": un(title), "venue": un(venue),
+                    "cost": un(cost), "note": un(note), "url": un(url), "cat": cat})
+    return out
+
+
 def main():
     test_id = None
     if "--test" in sys.argv:
@@ -571,6 +606,7 @@ def main():
 
     all_events = []
     stats = {}
+    failed = set()
     for src in registry:
         if test_id and src["id"] != test_id:
             continue
@@ -585,7 +621,40 @@ def main():
             print(f"  ✓ {src['id']:<28} {len(evs):>3} Events")
         except Exception as e:
             stats[src["id"]] = f"FEHLER: {e}"
+            failed.add(src["id"])
             print(f"  ✗ {src['id']:<28} FEHLER: {e}")
+
+    # Backfill: eine Quelle, die gefehlt hat, liefert sonst 0 Events.
+    # Die vorherigen (veröffentlichten) Events derselben Quelle werden aus
+    # calendar-data.js (Stand gestern) nachgeladen, damit ein temporärer
+    # Source-Ausfall (Wartung, 503, Timeout) die Live-Daten NICHT löscht.
+    # Zuordnung über die Herkunfts-Domain der Event-URL → Registry-URL,
+    # weil viele Parser Detailseiten-URLs ausgeben (tjg, Vollmann,
+    # Schlösserland, Code Week). Stale Events behalten ihren d/t; das
+    # Fenster unten filtert überfällige weg, Dedupe entfernt Überschneidungen.
+    def _origin(u):
+        m2 = re.match(r"https?://([^/]+)", u or "")
+        return m2.group(1) if m2 else ""
+
+    if failed and not test_id:
+        stale = load_prev(OUT)
+        if stale:
+            # origin → source-id für alle fehlgeschlagenen Quellen
+            failed_origin = {_origin(s["url"]): s["id"] for s in registry if s["id"] in failed}
+            by_src = {sid: [] for sid in failed}
+            for e in stale:
+                sid = failed_origin.get(_origin(e.get("url", "")))
+                if sid and in_window(e["d"]):
+                    by_src[sid].append(e)
+            kept = 0
+            for sid, evs in sorted(by_src.items()):
+                if not evs:
+                    continue
+                all_events += evs
+                stats[sid] = f"FEHLER→Backfill({len(evs)}): {stats.get(sid, '')}"
+                print(f"  ↩ {sid:<28} Backfill {len(evs)} Events aus vorherigem calendar-data.js")
+                kept += len(evs)
+            print(f"  ↩ Backfill gesamt: {kept} Events aus {len(failed)} fehlgeschlagenen Quellen")
 
     extra = load_extra()
     if not test_id:
@@ -631,10 +700,22 @@ def main():
             f'note: "{jse(e["note"])}", url: "{jse(e["url"])}", cat: "{jse(e["cat"])}" }}{comma}'
         )
     lines.append("];")
+    # Sanity-Guard: Ein massiver Event-Count-Abfall (z. B. > 40 %) deutet
+    # auf einen Parser-Bug oder mehrere Source-Ausfälle hin – dann NICHT
+    # schreiben, sondern abbrechen, damit die letzten guten Daten bleiben.
+    prev = load_prev(OUT)
+    if prev and len(out) < 0.6 * len(prev):
+        print(f"\n⛔ ABORT: {len(out)} Events – aber vorher {len(prev)}. "
+              f"Abfall > 40 %, calendar-data.js NICHT überschrieben.")
+        sys.exit(1)
     open(OUT, "w", encoding="utf-8").write("\n".join(lines) + "\n")
     print(f"\ngesamt: {len(out)} unique Events → {OUT}")
-    bad = [k for k, v in stats.items() if isinstance(v, str)]
-    if bad or not out:
+    # Backfill-Quellen sind „gelöst" (alte Daten erhalten) → kein Fehlschlag.
+    # Ein down-gegangener Source ohne Vor-Events verliert nichts. Der
+    # 40%-Guard oben ist der eigentliche Schutz gegen massiven Datenverlust;
+    # hart abbrechen, wenn garnichts mehr da wäre (katastrophaler Parser-Bug).
+    if not out:
+        print("⛔ KEINE Events generiert – calendar-data.js NICHT überschrieben.")
         sys.exit(1)
 
 
