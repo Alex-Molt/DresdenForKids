@@ -440,6 +440,11 @@ def p_schl_acc(src):
     return events
 
 
+# Kind-Events ohne typisches Kinder-Keyword im Titel (Museumsmausfest =
+# Familienfest der Museumsmaus Flitzi; typisch nur "Aktion").
+VM_KID_ALIAS = re.compile(r"Museumsmausfest|Flitzi", re.I)
+
+
 def p_verkehrsmuseum(src):
     U = src["url"]
     t = raw_fetch(U)
@@ -459,7 +464,7 @@ def p_verkehrsmuseum(src):
         d = datetime.date(int(dm.group(3)), int(dm.group(2)), int(dm.group(1)))
         if not in_window(d.isoformat()):
             continue
-        if not is_kid_event(title, typ.group(1) if typ else ""):
+        if not (is_kid_event(title, typ.group(1) if typ else "") or VM_KID_ALIAS.search(title)):
             continue
         events.append(mk(d, dm.group(4) or "–", title, "Verkehrsmuseum Dresden",
                          "siehe Detailseite", (typ.group(1).strip() if typ else ""),
