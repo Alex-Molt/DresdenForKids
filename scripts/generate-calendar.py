@@ -270,6 +270,8 @@ def p_zoo(src):
 
 
 def p_tjg(src):
+    # Kind-Filter: monatlicher Erwachsenen-Treff (kein Kinder-Event)
+    EXCLUDE = ("freiraum",)
     items = []
     for page in range(0, 6):
         data = json.loads(raw_fetch(f"https://www.tjg-dresden.de/api/events?page={page}&limit=50"))
@@ -279,6 +281,8 @@ def p_tjg(src):
             break
     events, seen = [], set()
     for i in items:
+        if any(x in i.get("title", "").lower() for x in EXCLUDE):
+            continue
         for dd in i.get("event_dates", []):
             iso = dd["start_date"][:10]
             if not in_window(iso):
