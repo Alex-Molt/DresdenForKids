@@ -41,7 +41,27 @@ def raw_fetch(url, referer=None):
     if "Wartungsarbeiten ist diese Seite momentan nicht erreichbar" in raw \
             or "Site down due to maintenance" in raw:
         raise RuntimeError("Quelle im Wartungsmodus (Maintenance-Page)")
-    return raw
+    return raw, r.geturl()
+
+
+def _canon(u):
+    """URL ohne Scheme/Trailing-Slash für den Redirect-Vergleich."""
+    u = re.sub(r"^https?://", "", u or "")
+    u = re.sub(r"^www\.", "", u)
+    return u.rstrip("/").lower()
+
+
+def check_redirect(url, final):
+    """Redirect-Wegleitung (z. B. Venue-Seite → /home) = Ausfall, kein
+    leeres Programm → Fehler, damit der Backfill greift."""
+    if _canon(final) != _canon(url):
+        raise RuntimeError(f"Redirect auf {final} (Seite nicht erreichbar wie erwartet)")
+
+
+def fetch(url, referer=None):
+    raw, final = raw_fetch(url, referer)
+    check_redirect(url, final)
+    return to_text(raw)
 
 
 def to_text(raw):
@@ -53,10 +73,6 @@ def to_text(raw):
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r"\n\s*\n+", "\n", t)
     return t.strip()
-
-
-def fetch(url, referer=None):
-    return to_text(raw_fetch(url, referer))
 
 
 def mk(d, t, title, venue, cost, note, url, cat):
@@ -194,7 +210,8 @@ def p_muehle(src):
 
 def p_tsd(src):
     U = src["url"]
-    t = raw_fetch(U)
+    t, f = raw_fetch(U)
+    check_redirect(U, f)
     blocks = re.split(r'<div class="event-list__event event-list__event--with-toggle', t)[1:]
     events, seen = [], set()
     for b in blocks:
@@ -274,7 +291,7 @@ def p_tjg(src):
     EXCLUDE = ("freiraum",)
     items = []
     for page in range(0, 6):
-        data = json.loads(raw_fetch(f"https://www.tjg-dresden.de/api/events?page={page}&limit=50"))
+        data = json.loads(raw_fetch(f"https://www.tjg-dresden.de/api/events?page={page}&limit=50")[0])
         batch = data.get("items", [])
         items += batch
         if len(batch) < 50:
@@ -353,7 +370,7 @@ def p_august(src):
 
 def p_vollmann(src):
     U = src["url"]
-    data = json.loads(raw_fetch(U, referer="https://www.puppentheater-vollmann.de/spielplan.html"))
+    data = json.loads(raw_fetch(U, referer="https://www.puppentheater-vollmann.de/spielplan.html")[0])
     events = []
     for e in data:
         iso = e["start"][:10]
@@ -376,7 +393,8 @@ def p_schl_list(src):
     """Schlösserland list-item-Layout (eigene Subdomains: Moritzburg, Rochlitz, Gnandstein, Nossen, Albrechtsburg, Zwinger)."""
     U = src["url"]
     base = _schl_base(U)
-    t = raw_fetch(U)
+    t, f = raw_fetch(U)
+    check_redirect(U, f)
     blocks = re.split(r'<div class="grid-list-item ', t)[1:]
     date_re = re.compile(r"^(?:Mo|Di|Mi|Do|Fr|Sa|So) (\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+bis\s+\w{1,3} (\d{1,2})\.(\d{1,2})\.(\d{4}))?$")
     time_re = re.compile(r"^(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?(?:\s*Uhr)?$")
@@ -422,7 +440,8 @@ def p_schl_list(src):
 def p_schl_acc(src):
     """Schlösserland Venue-Seiten mit Event-Akkordeon (Königstein, Freudenstein …)."""
     U = src["url"]
-    t = raw_fetch(U)
+    t, f = raw_fetch(U)
+    check_redirect(U, f)
     pat = re.compile(
         r'([MoDiMiFrSaSo]) (\d{1,2})\.(\d{1,2})\.(\d{4}) (\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2}) Uhr'
         r'[^|]*\|\s*([^<]+?)<br>\s*<a href="([^"]+)"[^>]*>([^<]+)<')
@@ -451,7 +470,8 @@ VM_KID_ALIAS = re.compile(r"Museumsmausfest|Flitzi", re.I)
 
 def p_verkehrsmuseum(src):
     U = src["url"]
-    t = raw_fetch(U)
+    t, f = raw_fetch(U)
+    check_redirect(U, f)
     events = []
     for b in re.split(r'itemtype="http://schema.org/Event"', t)[1:]:
         name = re.search(r'<h3[^>]*itemprop="name"[^>]*>\s*(?:<a[^>]*>)?\s*([^<]+?)\s*(?:</a>)?\s*</h3>', b, re.S)
@@ -483,7 +503,8 @@ def p_codeweek(src):
     <h3.wp-block-post-title><a href>Titel</a></h3> + 2x <h6><span.value> (Datum, Ort).
     Mehr-tägige Kurse: '15.10. – 16.10.26'. Detailseite: Uhrzeit + Altersempfehlung."""
     U = src["url"]
-    raw = raw_fetch(U)
+    raw, f = raw_fetch(U)
+    check_redirect(U, f)
     segs = re.split(r'kurstermin-panel', raw)[1:]
     events, seen = [], set()
     for s in segs:
