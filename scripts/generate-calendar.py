@@ -287,8 +287,9 @@ def p_zoo(src):
 
 
 def p_tjg(src):
-    # Kind-Filter: monatlicher Erwachsenen-Treff (kein Kinder-Event)
-    EXCLUDE = ("freiraum",)
+    # Kind-Filter: monatliche Erwachsenen-Treffen (kein Kinder-Event):
+    # Freiraum-Treff + Pädagog*innen-Stammtisch/Atelier (Fortbildung)
+    EXCLUDE = ("freiraum", "pädagog", "stammtisch")
     items = []
     for page in range(0, 6):
         data = json.loads(raw_fetch(f"https://www.tjg-dresden.de/api/events?page={page}&limit=50")[0])
