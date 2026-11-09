@@ -1,7 +1,6 @@
 // GENERIERT von scripts/generate-calendar.py – nicht von Hand editieren!
-// Quellen: Registry in README.md (18 Quellen) + calendar-extra.json (Stand 2026-11-08)
+// Quellen: Registry in README.md (18 Quellen) + calendar-extra.json (Stand 2026-11-09)
 const CALENDAR_EVENTS = [
-  { d: "2026-10-29", t: "18:00", title: "Wenn's knallt", venue: "tjg. Theater Junge Generation", cost: "4–16 €", note: "Tickets: tjg-dresden.de", url: "https://www.tjg-dresden.de/spielplan/", cat: "theater" },
   { d: "2026-10-30", t: "17:00 - 21:30", title: "Gruselhausen – Halloween-Event", venue: "Oskarshausen (Freital)", cost: "Ticket Vorverkauf (Ticketshop online)", note: "30./31.10. 17–21:30 Uhr · Feuershow, Escape Rooms, Mutproben, Kostüm- & Kürbisschnitz-Wettbewerb · ganze Familie: Erschrecker-freie Zone für Jüngere, Gefängnis der Dämonen ab 14 J. · 3 € günstiger am 30.10. · Tickets streng limitiert (nur Vorverkauf) · Burgker Str. 39, 01705 Freital", url: "https://www.oskarshausen.de/events/halloween-gruselhausen/", cat: "umkreis" },
   { d: "2026-10-30", t: "18:00", title: "Wenn's knallt", venue: "tjg. Theater Junge Generation", cost: "4–16 €", note: "Tickets: tjg-dresden.de", url: "https://www.tjg-dresden.de/spielplan/", cat: "theater" },
   { d: "2026-10-31", t: "10:00", title: "Mitmach-Labor \"Forschungsreise\"", venue: "Schloss Freudenstein (Freiberg)", cost: "siehe Veranstaltungsdetailseite", note: "Kategorien: Ausstellung , Sonder-Ausstellungen , Familien und Kinder", url: "https://www.schloesserland-sachsen.de/de/veranstaltungen-ausstellungen/detailseite/event/mitmach-labor-forschungsreise/47794/", cat: "umkreis" },
@@ -251,5 +250,6 @@ const CALENDAR_EVENTS = [
   { d: "2027-01-13", t: "09:00", title: "KA:PUTT oder Die sichtbare Seele der Dinge", venue: "tjg. Theater Junge Generation", cost: "4–16 €", note: "Tickets: tjg-dresden.de", url: "https://www.tjg-dresden.de/spielplan/", cat: "theater" },
   { d: "2027-01-16", t: "16:00", title: "Kasper und der gestohlene Schatz", venue: "Puppentheater Alte Feuerwache", cost: "Karten: puppentheater-vollmann.de", note: "Puppentheater für die ganze Familie, Pillnitz", url: "https://www.puppentheater-vollmann.de/spielplan.html", cat: "theater" },
   { d: "2027-01-17", t: "10:00", title: "Kasper und der gestohlene Schatz", venue: "Puppentheater Alte Feuerwache", cost: "Karten: puppentheater-vollmann.de", note: "Puppentheater für die ganze Familie, Pillnitz", url: "https://www.puppentheater-vollmann.de/spielplan.html", cat: "theater" },
-  { d: "2027-01-17", t: "16:00", title: "Kasper und der gestohlene Schatz", venue: "Puppentheater Alte Feuerwache", cost: "Karten: puppentheater-vollmann.de", note: "Puppentheater für die ganze Familie, Pillnitz", url: "https://www.puppentheater-vollmann.de/spielplan.html", cat: "theater" }
+  { d: "2027-01-17", t: "16:00", title: "Kasper und der gestohlene Schatz", venue: "Puppentheater Alte Feuerwache", cost: "Karten: puppentheater-vollmann.de", note: "Puppentheater für die ganze Familie, Pillnitz", url: "https://www.puppentheater-vollmann.de/spielplan.html", cat: "theater" },
+  { d: "2027-01-23", t: "16:00", title: "Rumpelstilzchen", venue: "Puppentheater Alte Feuerwache", cost: "Karten: puppentheater-vollmann.de", note: "Puppentheater für die ganze Familie, Pillnitz", url: "https://www.puppentheater-vollmann.de/spielplan.html", cat: "theater" }
 ];
