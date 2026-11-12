@@ -352,6 +352,9 @@ def p_august(src):
             break
         if not title:
             continue
+        # Ausgefallene Vorstellungen nicht als Event listen (z. B. „… – FÄLLT AUS“)
+        if "FÄLLT AUS" in title.upper():
+            continue
         # Preis + Kinder-Marker: nächste 3 Zeilen
         tail = " ".join(lines[i + 1:i + 4])
         price_m = re.search(r"([\d,]+(?:,\d+)? €(?:\s*-\s*[\d,]+(?:,\d+)? €)?)", tail)
