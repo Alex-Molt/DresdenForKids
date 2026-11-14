@@ -183,28 +183,79 @@ def _month_num(name):
 
 
 def p_muehle(src):
+    """Zschoner Mühle Puppentheater – MyCalendar-Monatansicht.
+
+    Seit 11/2026 rendert die /puppentheater/-Seite nur den AKTUELLEN Monat;
+    das alte „DD. Monat YYYY"-Kalendarium gibt's nicht mehr. Lösung: jede
+    Fenster-Monatseite per ?cid=<MCID>&month=M&yr=Y&time=month fetchen und
+    die MC-Struktur parsen:
+      - Tage:   <span class='screen-reader-text mc-day-date'>Sa. 31.10.26</span>
+      - Events: <article class='…mc_primary_<cat>…'> …
+                event-title-container">11:00: <Titel></div>
+    cid aus der Seite (data-href). Kind-Filter via Artikel-Kategorie
+    (puppentheater / familienveranstaltungen) + Uhrzeit < 18:00 (drop z. B.
+    19:00-Bandkonzert). Dedupe über (d,t,title): MC zeigt benachbarte
+    Monats-Events auf mehreren Seiten doppelt.
+    """
     U = "https://www.zschoner-muehle.de/puppentheater/"
-    lines = fetch(U).splitlines()
-    date_re = re.compile(r"^(?:\d{1,2} )?(\d{1,2})\. (\w+) (\d{4})$")
-    time_re = re.compile(r"^(\d{2}:\d{2}): (.+)$")
-    events, cur = [], None
-    for line in lines:
-        l = line.strip()
-        m = date_re.match(l)
-        if m:
-            mon = _month_num(m.group(2))
-            if mon:
-                cur = f"{m.group(3)}-{mon:02d}-{int(m.group(1)):02d}"
-            continue
-        t = time_re.match(l)
-        if t and cur and in_window(cur):
-            tm, title = t.group(1), t.group(2).strip()
+    raw, final = raw_fetch(U)
+    check_redirect(U, final)
+    cm = re.search(r"data-href='[^']*?cid=(mc-[0-9a-f]+)'", raw) or \
+         re.search(r'name="cid"\s+value="(mc-[0-9a-f]+)"', raw)
+    if not cm:
+        raise RuntimeError("MyCalendar-cid nicht gefunden (Layout geändert?)")
+    cid = cm.group(1)
+    day_re = re.compile(r"mc-day-date'>[A-Za-z]{2}\. (\d{2})\.(\d{2})\.(\d{2})</span>")
+    art_re = re.compile(
+        r"<article[^>]*class='([^']*)'[^>]*>"
+        r"(?:(?!</article>).)*?"
+        r"event-title-container\">(\d{2}:\d{2}): ([^<]+)</div>", re.S)
+    seen, events = set(), []
+    MON_DE = {1: "Januar", 2: "Februar", 3: "März", 4: "April", 5: "Mai",
+              6: "Juni", 7: "Juli", 8: "August", 9: "September",
+              10: "Oktober", 11: "November", 12: "Dezember"}
+    d = datetime.date(WINDOW_START.year, WINDOW_START.month, 1)
+    while d <= WINDOW_END:
+        url = f"{U}?cid={cid}&month={d.month}&yr={d.year}&time=month"
+        mraw, mfinal = raw_fetch(url)
+        check_redirect(url, mfinal)
+        # Guard: die Seite MUSS genau den angefragten Monat im Heading zeigen
+        # (Layout-/Redirect-Falle) – sonst Fehler → Backfill statt 0 Events.
+        hm = re.search(r"Veranstaltungen im ([A-Za-zÄÖÜäöü]+) (\d{4})", mraw)
+        if not (hm and hm.group(1) == MON_DE[d.month] and int(hm.group(2)) == d.year):
+            raise RuntimeError(f"Monat {d.year}-{d.month:02d} nicht auf Seite (got: {hm.groups() if hm else 'kein Heading'})")
+        if not day_re.search(mraw):
+            raise RuntimeError(f"keine mc-day-date-Zellen auf {d.year}-{d.month:02d}")
+        toks = [(m.start(), "day", m) for m in day_re.finditer(mraw)]
+        toks += [(m.start(), "ev", m) for m in art_re.finditer(mraw)]
+        toks.sort(key=lambda x: x[0])
+        cur = None
+        for _, kind, m in toks:
+            if kind == "day":
+                try:
+                    cur = datetime.date(2000 + int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                except ValueError:
+                    cur = None
+                continue
+            if not cur or not in_window(cur.isoformat()):
+                continue
+            cats = m.group(1)
+            tm, title = m.group(2), m.group(3).strip()
+            if not ("mc_primary_puppentheater" in cats or "mc_primary_familienveranstaltungen" in cats):
+                continue
+            if int(tm.split(":")[0]) >= 18:  # Abend-Events (Konzert etc.) → nicht kind
+                continue
+            key = (cur.isoformat(), tm, title.lower())
+            if key in seen:
+                continue
+            seen.add(key)
             is_tour = "mühlenführung" in title.lower()
             events.append(mk(cur, tm, title, "Zschoner Mühle",
                              "7 € / erm. 5 €" if is_tour else "Karten online (zschoner-muehle.de)",
                              "Erlebnismühlenführung – Dresdner Mühlenmuseum, Reservierung empfohlen" if is_tour
                              else "Puppentheater für die ganze Familie – Reservierung empfohlen",
                              U, "muehle"))
+        d = (d.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
     return events
 
 
