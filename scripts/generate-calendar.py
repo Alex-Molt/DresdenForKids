@@ -224,37 +224,41 @@ def p_muehle(src):
         hm = re.search(r"Veranstaltungen im ([A-Za-zÄÖÜäöü]+) (\d{4})", mraw)
         if not (hm and hm.group(1) == MON_DE[d.month] and int(hm.group(2)) == d.year):
             raise RuntimeError(f"Monat {d.year}-{d.month:02d} nicht auf Seite (got: {hm.groups() if hm else 'kein Heading'})")
-        if not day_re.search(mraw):
-            raise RuntimeError(f"keine mc-day-date-Zellen auf {d.year}-{d.month:02d}")
-        toks = [(m.start(), "day", m) for m in day_re.finditer(mraw)]
-        toks += [(m.start(), "ev", m) for m in art_re.finditer(mraw)]
-        toks.sort(key=lambda x: x[0])
-        cur = None
-        for _, kind, m in toks:
-            if kind == "day":
-                try:
-                    cur = datetime.date(2000 + int(m.group(3)), int(m.group(2)), int(m.group(1)))
-                except ValueError:
-                    cur = None
-                continue
-            if not cur or not in_window(cur.isoformat()):
-                continue
-            cats = m.group(1)
-            tm, title = m.group(2), m.group(3).strip()
-            if not ("mc_primary_puppentheater" in cats or "mc_primary_familienveranstaltungen" in cats):
-                continue
-            if int(tm.split(":")[0]) >= 18:  # Abend-Events (Konzert etc.) → nicht kind
-                continue
-            key = (cur.isoformat(), tm, title.lower())
-            if key in seen:
-                continue
-            seen.add(key)
-            is_tour = "mühlenführung" in title.lower()
-            events.append(mk(cur, tm, title, "Zschoner Mühle",
-                             "7 € / erm. 5 €" if is_tour else "Karten online (zschoner-muehle.de)",
-                             "Erlebnismühlenführung – Dresdner Mühlenmuseum, Reservierung empfohlen" if is_tour
-                             else "Puppentheater für die ganze Familie – Reservierung empfohlen",
-                             U, "muehle"))
+        if day_re.search(mraw):
+            # MyCalendar rendert Monate OHNE Events ganz leer (kein Tagesraster) –
+            # Heading-Guard oben hat die richtige Monatsseite schon bestätigt →
+            # leeres Monat ist 0 Events, kein Fehler (beobachtet 02/2027, 19.11.26).
+            # WICHTIG: kein continue hier – das Monats-Advance am Schleifenende
+            # müsste weiterlaufen.
+            toks = [(m.start(), "day", m) for m in day_re.finditer(mraw)]
+            toks += [(m.start(), "ev", m) for m in art_re.finditer(mraw)]
+            toks.sort(key=lambda x: x[0])
+            cur = None
+            for _, kind, m in toks:
+                if kind == "day":
+                    try:
+                        cur = datetime.date(2000 + int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                    except ValueError:
+                        cur = None
+                    continue
+                if not cur or not in_window(cur.isoformat()):
+                    continue
+                cats = m.group(1)
+                tm, title = m.group(2), m.group(3).strip()
+                if not ("mc_primary_puppentheater" in cats or "mc_primary_familienveranstaltungen" in cats):
+                    continue
+                if int(tm.split(":")[0]) >= 18:  # Abend-Events (Konzert etc.) → nicht kind
+                    continue
+                key = (cur.isoformat(), tm, title.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                is_tour = "mühlenführung" in title.lower()
+                events.append(mk(cur, tm, title, "Zschoner Mühle",
+                                 "7 € / erm. 5 €" if is_tour else "Karten online (zschoner-muehle.de)",
+                                 "Erlebnismühlenführung – Dresdner Mühlenmuseum, Reservierung empfohlen" if is_tour
+                                 else "Puppentheater für die ganze Familie – Reservierung empfohlen",
+                                 U, "muehle"))
         d = (d.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
     return events
 
