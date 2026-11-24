@@ -344,7 +344,11 @@ def p_zoo(src):
 def p_tjg(src):
     # Kind-Filter: monatliche Erwachsenen-Treffen (kein Kinder-Event):
     # Freiraum-Treff + Pädagog*innen-Stammtisch/Atelier (Fortbildung)
-    EXCLUDE = ("freiraum", "pädagog", "stammtisch")
+    # + nicht für 5–10 J.: Fabian (Berlin 1930, Erwachsenenstück),
+    #   Blurred Lines (Jugendstück, Teenager-Party – zu alt für 5/10 J.),
+    #   hildensaga (Nibelungen-Metadrama, Abend 17/18h – zu ernst/zu alt).
+    #   LLM-Kindfilter-Entscheidung 24.11.2026.
+    EXCLUDE = ("freiraum", "pädagog", "stammtisch", "fabian", "blurred lines", "hildensaga")
     items = []
     for page in range(0, 6):
         data = json.loads(raw_fetch(f"https://www.tjg-dresden.de/api/events?page={page}&limit=50")[0])
